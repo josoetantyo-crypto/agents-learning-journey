@@ -377,7 +377,31 @@ tr:hover td{background:rgba(0,0,0,0.015)}
 .completion-banner h2{font-size:22px;font-weight:800;margin-bottom:7px}
 .completion-banner p{font-size:13px;color:rgba(255,255,255,0.72)}
 
-@media(max-width:768px){#sidebar{display:none}.grid-2,.grid-3,.comp-table,.f3-flow,.onboard-grid,.p1-stats{grid-template-columns:1fr}.form-row{flex-direction:column}}
+/* ── MOBILE TOP BAR ── */
+#mobile-bar{display:none;align-items:center;gap:12px;padding:12px 16px;background:#111827;color:#fff;position:sticky;top:0;z-index:998}
+#mobile-bar .mb-logo{font-size:16px;font-weight:800;flex:1}
+#mobile-bar .mb-sub{font-size:10px;color:rgba(255,255,255,.6)}
+#hamburger{background:none;border:none;cursor:pointer;color:#fff;font-size:22px;padding:4px;line-height:1;flex-shrink:0}
+
+/* ── SIDEBAR OVERLAY ── */
+#sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:999;-webkit-tap-highlight-color:transparent}
+#sidebar-overlay.show{display:block}
+
+/* ── SIDEBAR CLOSE BTN (mobile only) ── */
+.sb-close{display:none;align-items:center;justify-content:flex-end;padding:10px 12px 0;cursor:pointer}
+.sb-close button{background:rgba(255,255,255,.12);border:none;color:#fff;font-size:18px;width:32px;height:32px;border-radius:50%;cursor:pointer;line-height:1}
+
+@media(max-width:768px){
+  #sidebar{position:fixed;left:-260px;top:0;height:100%;z-index:1000;transition:left .28s ease;width:240px;min-width:240px}
+  #sidebar.open{left:0}
+  #mobile-bar{display:flex}
+  #main{padding:16px}
+  .sb-close{display:flex}
+  .grid-2,.grid-3,.comp-table,.f3-flow,.onboard-grid,.p1-stats{grid-template-columns:1fr}
+  .form-row{flex-direction:column}
+  .hero h1{font-size:20px}
+  .hero-input{flex-direction:column}
+}
 
 /* ── Session 3 color ── */
 .s3-color{border-left-color:#22c55e}
@@ -531,8 +555,18 @@ tr:hover td{background:rgba(0,0,0,0.015)}
 </head>
 <body>
 
+<!-- MOBILE TOP BAR -->
+<div id="mobile-bar">
+  <button id="hamburger" onclick="openSidebar()" aria-label="Buka menu">☰</button>
+  <div><div class="mb-logo">IGNITEX</div><div class="mb-sub">Agents Learning Journey</div></div>
+</div>
+
+<!-- OVERLAY -->
+<div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
 <!-- ══ SIDEBAR ══ -->
 <div id="sidebar">
+  <div class="sb-close"><button onclick="closeSidebar()" aria-label="Tutup menu">✕</button></div>
   <div class="sb-header">
     <div class="sb-logo">IGNITEX</div>
     <div class="sb-sub">Agents Learning Journey</div>
@@ -2220,6 +2254,7 @@ function goTo(id){
   if(inS1){if(!sg1.classList.contains('open'))toggleSession('sg1');if(sg2.classList.contains('open'))toggleSession('sg2');if(sg3.classList.contains('open'))toggleSession('sg3');}
   if(inS2){if(!sg2.classList.contains('open'))toggleSession('sg2');if(sg1.classList.contains('open'))toggleSession('sg1');if(sg3.classList.contains('open'))toggleSession('sg3');}
   if(inS3){if(!sg3.classList.contains('open'))toggleSession('sg3');if(sg1.classList.contains('open'))toggleSession('sg1');if(sg2.classList.contains('open'))toggleSession('sg2');}
+  if(window.innerWidth<=768) closeSidebar();
 }
 
 
@@ -2229,6 +2264,8 @@ function toggleCP(id){
   el.classList.toggle('open');
 }
 
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sidebar-overlay').classList.add('show');document.body.style.overflow='hidden';}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebar-overlay').classList.remove('show');document.body.style.overflow='';}
 function toggleSession(id){document.getElementById(id).classList.toggle('open');}
 
 
