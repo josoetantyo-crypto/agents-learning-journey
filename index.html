@@ -1979,6 +1979,11 @@ tr:hover td{background:rgba(0,0,0,0.015)}
             <button class="gs-timeline-btn" onclick="gsSelectTimeline(this,18)">18 bln</button>
             <button class="gs-timeline-btn" onclick="gsSelectTimeline(this,24)">24 bln</button>
           </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:9px">
+            <span style="font-size:11px;color:#64748b;white-space:nowrap">atau ketik:</span>
+            <input type="text" inputmode="numeric" id="gs-tl-custom" style="width:72px;padding:5px 9px;border:1.5px solid #E2E8F0;border-radius:7px;font-size:12px;text-align:center" placeholder="bulan" oninput="var m=parseInt(this.value.replace(/\D/g,\'\'))||0;if(m>0){gsTimeline=m;document.querySelectorAll(\'#gs-tl-btns .gs-timeline-btn\').forEach(function(b){b.classList.remove(\'sel\');});}">
+            <span style="font-size:11px;color:#64748b">bulan</span>
+          </div>
         </div>
         <div class="gs-section">
           <div class="gs-section-title">💰 Rata-rata Premi Bulanan per Case</div>
@@ -1988,6 +1993,11 @@ tr:hover td{background:rgba(0,0,0,0.015)}
             <button class="gs-param-btn" onclick="gsSelectPremi(this,1500000)">1,5 jt</button>
             <button class="gs-param-btn" onclick="gsSelectPremi(this,2000000)">2 jt</button>
             <button class="gs-param-btn" onclick="gsSelectPremi(this,3000000)">3 jt</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:9px">
+            <span style="font-size:11px;color:#64748b;white-space:nowrap">atau ketik (juta):</span>
+            <input type="text" inputmode="numeric" id="gs-premi-custom" style="width:72px;padding:5px 9px;border:1.5px solid #E2E8F0;border-radius:7px;font-size:12px;text-align:center" placeholder="cth: 5" oninput="var v=parseFloat(this.value.replace(\',\',\'.\'))*1000000||0;if(v>0){gsPremi=v;document.querySelectorAll(\'#gs-premi-btns .gs-param-btn\').forEach(function(b){b.classList.remove(\'sel\');});}">
+            <span style="font-size:11px;color:#64748b">jt/case</span>
           </div>
         </div>
         <div class="gs-section">
@@ -2505,6 +2515,34 @@ function gsInsertGoalDetail(key, def){
   });
   row.appendChild(tlBtns);
 
+  // Custom timeline input
+  var tlCustRow = document.createElement('div');
+  tlCustRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:8px';
+  var tlCL = document.createElement('span');
+  tlCL.style.cssText = 'font-size:11px;color:#64748b;white-space:nowrap';
+  tlCL.textContent = 'atau ketik:';
+  var tlCI = document.createElement('input');
+  tlCI.type = 'text'; tlCI.inputMode = 'numeric';
+  tlCI.style.cssText = 'width:70px;padding:5px 8px;border:1.5px solid #E2E8F0;border-radius:7px;font-size:12px;text-align:center';
+  tlCI.placeholder = 'bulan';
+  tlCI.dataset.key = key;
+  tlCI.addEventListener('input', function(){
+    var m = parseInt(this.value.replace(/\D/g,''))||0;
+    if(m > 0){
+      var k = this.dataset.key;
+      gsGoals[k].timeline = m;
+      tlBtns.querySelectorAll('.gs-param-btn').forEach(function(b){ b.classList.remove('sel'); });
+      gsRefreshTotal();
+      var monthEl = document.getElementById('gm-'+k);
+      if(monthEl) monthEl.textContent = gsFormatRp(gsGoals[k].price / m)+'/bln';
+    }
+  });
+  var tlCS = document.createElement('span');
+  tlCS.style.cssText = 'font-size:11px;color:#64748b';
+  tlCS.textContent = 'bulan';
+  tlCustRow.appendChild(tlCL); tlCustRow.appendChild(tlCI); tlCustRow.appendChild(tlCS);
+  row.appendChild(tlCustRow);
+
   // Monthly savings display
   var monthRow = document.createElement('div');
   monthRow.style.cssText = 'margin-top:8px;font-size:12px;color:#22c55e;font-weight:700;text-align:right';
@@ -2546,7 +2584,7 @@ function gsRefreshTotal(){
 }
 
 function gsUpdateIncomeDisplay(){
-  gsLiving = parseInt(document.getElementById('gs-living').value)||0;
+  gsLiving = parseInt((document.getElementById('gs-living').value||'').replace(/\./g,''))||0;
   var totalGoalsMonthly = 0;
   Object.keys(gsGoals).forEach(function(k){
     var g = gsGoals[k];
@@ -2675,6 +2713,19 @@ function gsSelectAdjust(type){
       btn.addEventListener('click',function(){ gsAdjPremi=v; adjBtns.querySelectorAll('.gs-param-btn').forEach(function(b){b.classList.remove('sel');}); this.classList.add('sel'); });
       adjBtns.appendChild(btn);
     });
+    // custom premi input
+    var adjCR=document.createElement('div'); adjCR.style.cssText='display:flex;align-items:center;gap:8px;margin-top:9px';
+    var adjCL=document.createElement('span'); adjCL.style.cssText='font-size:11px;color:#64748b;white-space:nowrap'; adjCL.textContent='atau ketik (juta):';
+    var adjCI=document.createElement('input'); adjCI.type='text'; adjCI.inputMode='numeric';
+    adjCI.style.cssText='width:72px;padding:5px 9px;border:1.5px solid #E2E8F0;border-radius:7px;font-size:12px;text-align:center';
+    adjCI.placeholder='cth: 5';
+    adjCI.addEventListener('input',function(){
+      var v=parseFloat(this.value.replace(',','.'))*1000000||0;
+      if(v>0){gsAdjPremi=v;adjBtns.querySelectorAll('.gs-param-btn').forEach(function(b){b.classList.remove('sel');});}
+    });
+    var adjCS=document.createElement('span'); adjCS.style.cssText='font-size:11px;color:#64748b'; adjCS.textContent='jt/case';
+    adjCR.appendChild(adjCL); adjCR.appendChild(adjCI); adjCR.appendChild(adjCS);
+    adjBtns.insertAdjacentElement('afterend', adjCR);
   } else if(type==='ratio'){
     document.getElementById('gs-adj-title').textContent = '🎯 Pilih Ratio Closing Baru';
     var rvals=[3,5,10], rlbls=['1 : 3','1 : 5','1 : 10'];
