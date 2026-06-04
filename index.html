@@ -575,6 +575,14 @@ tr:hover td{background:rgba(0,0,0,0.015)}
 .mb-logo .logo-img{height:22px;width:auto;display:block}
 .sb-logo .logo-img{height:30px;width:auto;display:block}
 
+
+/* ── P1 Name List checkbox ── */
+.p1-check{width:24px;height:24px;border-radius:7px;border:2px solid #cbd5e1;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:#fff;font-size:13px;font-weight:800;transition:all .15s}
+.p1-check:hover{border-color:var(--green)}
+.p1-check.checked{background:var(--green);border-color:var(--green)}
+.p1-item.met{border-color:var(--green);background:#f0fdf4}
+.p1-item.met .p1-item-name{color:var(--green)}
+
 </style>
 </head>
 <body>
@@ -1522,7 +1530,7 @@ tr:hover td{background:rgba(0,0,0,0.015)}
   <!-- MOD 4: NAME LIST + P1 CONTEST -->
   <div class="module" id="mod4">
     <div class="module-header">
-      <div><div class="module-tag">🚀 Action Week 1</div><h2>Name List + P1 Contest</h2><div class="module-sub">Catat setiap P1 yang sudah dilakukan dalam 7 hari pertama</div></div>
+      <div><div class="module-tag">🚀 Action Week 1</div><h2>Name List + P1 Contest</h2><div class="module-sub">Tulis 10 nama pertama yang mau kamu temui — centang setelah ketemu, baru terhitung P1</div></div>
       <button class="btn-done" id="done4" onclick="markDone(4)">Tandai Selesai</button>
     </div>
     <div class="p1-stats">
@@ -1536,19 +1544,20 @@ tr:hover td{background:rgba(0,0,0,0.015)}
     <div class="p1-prog"><div class="p1-prog-fill" id="p1-bar" style="width:0%"></div></div>
     <div id="p1-badges" style="margin-bottom:14px;min-height:18px"></div>
     <div class="add-p1-form">
-      <h4>➕ Catat P1 Baru</h4>
+      <h4>➕ Tulis Nama yang Mau Ditemui</h4>
       <div class="form-row">
-        <input class="form-input" type="text" id="p1-name-input" placeholder="Nama orang yang sudah dikunjungi..." maxlength="50">
+        <input class="form-input" type="text" id="p1-name-input" placeholder="Nama orang yang mau kamu temui..." maxlength="50">
         <select class="form-select" id="p1-cat-input">
           <option value="R1">R1 — Keluarga/Sahabat</option>
           <option value="R2">R2 — Teman/Kolega</option>
           <option value="R3">R3 — Referensi</option>
         </select>
-        <button class="btn-add" onclick="addP1()">+ Catat</button>
+        <button class="btn-add" onclick="addP1()">+ Tambah</button>
       </div>
     </div>
-    <h3 style="margin-bottom:10px">📋 Daftar P1 Kamu</h3>
-    <div class="p1-list-empty" id="p1-empty">Belum ada P1. Tambahkan nama pertama kamu! 🚀</div>
+    <h3 style="margin-bottom:4px">📋 Name List Kamu <span id="p1-listcount" style="color:var(--muted);font-weight:600;font-size:13px">(0/10)</span></h3>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 10px">Centang ✓ setelah benar-benar ketemu — hanya yang tercentang masuk hitungan P1 &amp; reward.</p>
+    <div class="p1-list-empty" id="p1-empty">Belum ada nama. Tulis 10 nama pertama yang mau kamu temui! 🚀</div>
     <div id="p1-list"></div>
     <div class="quote-block"><p>"Di bisnis ini, orang yang berhasil bukan yang paling pintar. Tapi yang paling cepat bergerak."</p></div>
   </div>
@@ -2474,33 +2483,44 @@ function prevSlide(){if(curSlide>0)setSlide(curSlide-1);}
 function nextSlide(){if(curSlide<SLIDES.length-1)setSlide(curSlide+1);}
 function jumpSlide(i){setSlide(i);goTo('mod3');}
 
-// P1 LIST
+// P1 LIST — name list dulu, centang setelah ketemu
 function addP1(){
   let name=document.getElementById('p1-name-input').value.trim();
   if(!name){document.getElementById('p1-name-input').focus();return;}
   let cat=document.getElementById('p1-cat-input').value;
-  p1List.push({id:Date.now(),name,cat,date:new Date().toLocaleDateString('id-ID')});
+  p1List.push({id:Date.now(),name,cat,date:new Date().toLocaleDateString('id-ID'),met:false});
   localStorage.setItem('alj_p1list',JSON.stringify(p1List));
   document.getElementById('p1-name-input').value='';
   renderP1List();
 }
 function deleteP1(id){p1List=p1List.filter(x=>x.id!==id);localStorage.setItem('alj_p1list',JSON.stringify(p1List));renderP1List();}
+function toggleMet(id){
+  let it=p1List.find(x=>x.id===id);
+  if(!it)return;
+  it.met=!it.met;
+  it.metDate=it.met?new Date().toLocaleDateString('id-ID'):null;
+  localStorage.setItem('alj_p1list',JSON.stringify(p1List));
+  renderP1List();
+}
 function renderP1List(){
-  let n=p1List.length;
-  document.getElementById('p1-total').textContent=n;
-  document.getElementById('p1-reward').textContent=n>=8?'Rp 100.000':n>=5?'Rp 50.000':'Rp 0';
-  document.getElementById('p1-bar').style.width=Math.min(n/8*100,100)+'%';
-  document.getElementById('target5').classList.toggle('reached',n>=5);
-  document.getElementById('target8').classList.toggle('reached',n>=8);
+  let total=p1List.length;
+  let met=p1List.filter(x=>x.met).length;
+  document.getElementById('p1-listcount').textContent='('+total+'/10)';
+  document.getElementById('p1-total').textContent=met;
+  document.getElementById('p1-reward').textContent=met>=8?'Rp 100.000':met>=5?'Rp 50.000':'Rp 0';
+  document.getElementById('p1-bar').style.width=Math.min(met/8*100,100)+'%';
+  document.getElementById('target5').classList.toggle('reached',met>=5);
+  document.getElementById('target8').classList.toggle('reached',met>=8);
   let badges='';
-  if(n>=8)badges='<span class="badge badge-gold">🏆 100K EARNED!</span>';
-  else if(n>=5)badges='<span class="badge badge-red">🎯 50K EARNED — Terus gas sampai 8!</span>';
+  if(met>=8)badges='<span class="badge badge-gold">🏆 100K EARNED!</span>';
+  else if(met>=5)badges='<span class="badge badge-red">🎯 50K EARNED — Terus gas sampai 8!</span>';
+  else if(total>=10)badges='<span class="badge badge-red">📋 Name list lengkap — gas ketemu satu per satu!</span>';
   document.getElementById('p1-badges').innerHTML=badges;
-  document.getElementById('p1-empty').style.display=n===0?'block':'none';
+  document.getElementById('p1-empty').style.display=total===0?'block':'none';
   let html='';
   p1List.forEach((item,idx)=>{
     let cc=item.cat==='R1'?'cat-r1':item.cat==='R2'?'cat-r2':'cat-r3';
-    html+=`<div class="p1-item"><div class="p1-item-num">${idx+1}</div><div class="p1-item-name">${item.name}</div><span class="p1-item-cat ${cc}">${item.cat}</span><span class="p1-item-date">${item.date}</span><button class="btn-del" onclick="deleteP1(${item.id})">×</button></div>`;
+    html+=`<div class="p1-item${item.met?' met':''}"><div class="p1-check${item.met?' checked':''}" onclick="toggleMet(${item.id})" title="${item.met?'Batal centang':'Tandai sudah ketemu'}">${item.met?'✓':''}</div><div class="p1-item-num">${idx+1}</div><div class="p1-item-name">${item.name}</div><span class="p1-item-cat ${cc}">${item.cat}</span><span class="p1-item-date">${item.met?'✅ '+(item.metDate||''):'belum ketemu'}</span><button class="btn-del" onclick="deleteP1(${item.id})">×</button></div>`;
   });
   document.getElementById('p1-list').innerHTML=html;
 }
