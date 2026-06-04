@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Generator — IgniteX</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--red:#C8102E;--red-dark:#9B0B22;--bg:#F4F5F7;--card:#fff;--border:#E2E8F0;--text:#1E293B;--muted:#64748B;--green:#059669}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Poppins',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.topbar{background:#000;color:#fff;padding:14px 20px;display:flex;align-items:center;gap:10px}
+.topbar .brand{font-size:17px;font-weight:800;letter-spacing:.5px}
+.topbar .sub{font-size:11px;color:rgba(255,255,255,.6)}
+.wrap{max-width:860px;margin:0 auto;padding:22px 16px 60px}
+h1{font-size:20px;font-weight:800;margin-bottom:4px}
+.lead{font-size:13px;color:var(--muted);margin-bottom:20px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:18px}
+.card h2{font-size:14px;font-weight:700;margin-bottom:14px}
+.frow{display:flex;gap:10px;flex-wrap:wrap}
+.frow input{flex:1;min-width:180px;padding:11px 14px;border:1.5px solid var(--border);border-radius:9px;font-family:inherit;font-size:13px;outline:none}
+.frow input:focus{border-color:var(--red)}
+.btn{padding:11px 20px;background:var(--red);color:#fff;border:none;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--red-dark)}
+.btn:disabled{opacity:.5;cursor:wait}
+.btn-sm{padding:7px 12px;font-size:11.5px;border-radius:8px}
+.btn-wa{background:#25D366}
+.btn-wa:hover{background:#1da851}
+.btn-ghost{background:#fff;color:var(--text);border:1.5px solid var(--border)}
+.btn-ghost:hover{background:#f8fafc}
+.btn-del{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:4px 8px}
+.btn-del:hover{color:var(--red)}
+.result{display:none;margin-top:16px;background:#f0fdf4;border:1.5px solid var(--green);border-radius:11px;padding:15px}
+.result.show{display:block}
+.result .rname{font-weight:700;font-size:14px;color:var(--green);margin-bottom:6px}
+.result .rlink{font-family:monospace;font-size:12px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 12px;word-break:break-all;margin-bottom:10px}
+.err{display:none;margin-top:12px;font-size:12.5px;color:var(--red);font-weight:600}
+.agent-row{display:flex;align-items:center;gap:10px;padding:13px 4px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.agent-row:last-child{border-bottom:none}
+.a-info{flex:1;min-width:150px}
+.a-name{font-size:13.5px;font-weight:700}
+.a-wa{font-size:11.5px;color:var(--muted)}
+.a-prog{text-align:center;min-width:88px}
+.a-prog .n{font-size:15px;font-weight:800;color:var(--red)}
+.a-prog .n.done{color:var(--green)}
+.a-prog .l{font-size:10px;color:var(--muted)}
+.a-actions{display:flex;gap:7px;align-items:center}
+.empty{text-align:center;color:var(--muted);font-size:13px;padding:26px 0}
+.note{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.6}
+.refresh{float:right;font-size:11.5px;color:var(--red);cursor:pointer;font-weight:600;user-select:none}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#000;color:#fff;font-size:12.5px;padding:10px 20px;border-radius:24px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:99}
+.toast.show{opacity:1}
+@media(max-width:560px){.a-prog{min-width:70px}}
+</style>
+</head>
+<body>
+<div class="topbar"><div><div class="brand">IGNITEX</div><div class="sub">Agent Generator — khusus leader</div></div></div>
+<div class="wrap">
+  <h1>🔗 Agent Generator</h1>
+  <p class="lead">Buat link unik untuk setiap agent baru. Agent buka link-nya → nama langsung muncul di dashboard → name list &amp; progress P1 tersimpan otomatis ke database.</p>
+
+  <div class="card">
+    <h2>➕ Generate Link Agent Baru</h2>
+    <div class="frow">
+      <input type="text" id="g-name" placeholder="Nama agent..." maxlength="60">
+      <input type="tel" id="g-wa" placeholder="No WA (08xxx / 628xxx)" maxlength="20">
+      <button class="btn" id="g-btn" onclick="generate()">Generate Link</button>
+    </div>
+    <div class="err" id="g-err"></div>
+    <div class="result" id="g-result">
+      <div class="rname" id="r-name"></div>
+      <div class="rlink" id="r-link"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-ghost" onclick="copyLink(document.getElementById('r-link').textContent)">📋 Copy Link</button>
+        <button class="btn btn-sm btn-wa" id="r-wa-btn">💬 Kirim via WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>👥 Daftar Agent <span class="refresh" onclick="loadAgents()">↻ Refresh</span></h2>
+    <div id="agent-list"><div class="empty">Memuat...</div></div>
+    <div class="note">Kolom P1 = jumlah nama yang sudah <strong>dicentang ketemu</strong> / total nama di list. Data live dari database — refresh untuk update terbaru.</div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const CANON = 'https://ignitex-learning-journey.vercel.app';
+const API = (location.origin.indexOf('vercel.app') > -1 ? location.origin : CANON) + '/api';
+const DASH = CANON + '/';
+
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+function copyLink(text){navigator.clipboard.writeText(text).then(()=>toast('Link tersalin ✓'));}
+function waUrl(wa, name, link){
+  const msg = 'Halo '+name+'! 👋\n\nIni link Agents Learning Journey khusus kamu — buka, nama kamu langsung muncul, dan progress kamu tersimpan otomatis:\n\n'+link+'\n\nSemangat! 🚀';
+  return 'https://wa.me/'+wa+'?text='+encodeURIComponent(msg);
+}
+
+async function generate(){
+  const name=document.getElementById('g-name').value.trim();
+  const wa=document.getElementById('g-wa').value.trim();
+  const err=document.getElementById('g-err'), btn=document.getElementById('g-btn');
+  err.style.display='none';
+  if(!name||!wa){err.textContent='Nama dan No WA wajib diisi.';err.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Membuat...';
+  try{
+    const r=await fetch(API+'/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,wa})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Gagal membuat agent');
+    const link=DASH+'?agent='+d.agent.id;
+    document.getElementById('r-name').textContent='✅ '+d.agent.name;
+    document.getElementById('r-link').textContent=link;
+    document.getElementById('r-wa-btn').onclick=()=>window.open(waUrl(d.agent.wa,d.agent.name,link),'_blank');
+    document.getElementById('g-result').classList.add('show');
+    document.getElementById('g-name').value='';document.getElementById('g-wa').value='';
+    loadAgents();
+  }catch(e){err.textContent='⚠️ '+e.message;err.style.display='block';}
+  btn.disabled=false;btn.textContent='Generate Link';
+}
+
+async function loadAgents(){
+  const box=document.getElementById('agent-list');
+  try{
+    const r=await fetch(API+'/agents');
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Gagal memuat');
+    if(!d.agents.length){box.innerHTML='<div class="empty">Belum ada agent. Generate link pertama di atas! 🚀</div>';return;}
+    box.innerHTML=d.agents.map(a=>{
+      const link=DASH+'?agent='+a.id;
+      return `<div class="agent-row">
+        <div class="a-info"><div class="a-name">${esc(a.name)}</div><div class="a-wa">📱 ${esc(a.wa)} · ${(a.createdAt||'').slice(0,10)}</div></div>
+        <div class="a-prog"><div class="n ${a.p1Met>=8?'done':''}">${a.p1Met}/${a.p1Total}</div><div class="l">P1 ketemu/list</div></div>
+        <div class="a-actions">
+          <button class="btn btn-sm btn-ghost" onclick="copyLink('${link}')">📋</button>
+          <button class="btn btn-sm btn-wa" onclick="window.open(waUrl('${esc(a.wa)}','${esc(a.name).replace(/'/g,"\\'")}','${link}'),'_blank')">💬</button>
+          <button class="btn-del" title="Hapus agent" onclick="delAgent('${a.id}','${esc(a.name).replace(/'/g,"\\'")}')">×</button>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){box.innerHTML='<div class="empty">⚠️ '+e.message+'</div>';}
+}
+
+async function delAgent(id,name){
+  if(!confirm('Hapus agent "'+name+'"? Data P1-nya ikut terhapus.'))return;
+  await fetch(API+'/agents?id='+id,{method:'DELETE'});
+  toast('Agent dihapus');
+  loadAgents();
+}
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+document.getElementById('g-wa').addEventListener('keydown',e=>{if(e.key==='Enter')generate();});
+loadAgents();
+</script>
+</body>
+</html>

@@ -1555,7 +1555,7 @@ tr:hover td{background:rgba(0,0,0,0.015)}
         <button class="btn-add" onclick="addP1()">+ Tambah</button>
       </div>
     </div>
-    <h3 style="margin-bottom:4px">📋 Name List Kamu <span id="p1-listcount" style="color:var(--muted);font-weight:600;font-size:13px">(0/10)</span></h3>
+    <h3 style="margin-bottom:4px">📋 Name List Kamu <span id="p1-listcount" style="color:var(--muted);font-weight:600;font-size:13px">(0/10)</span> <span id="p1-sync" style="font-size:11px;font-weight:600"></span></h3>
     <p style="font-size:12px;color:var(--muted);margin:0 0 10px">Centang ✓ setelah benar-benar ketemu — hanya yang tercentang masuk hitungan P1 &amp; reward.</p>
     <div class="p1-list-empty" id="p1-empty">Belum ada nama. Tulis 10 nama pertama yang mau kamu temui! 🚀</div>
     <div id="p1-list"></div>
@@ -2373,6 +2373,46 @@ let p1List=JSON.parse(localStorage.getItem('alj_p1list')||'[]');
 let curSlide=0;
 const TOTAL_MODS=12;
 
+
+// ── Agent mode: link unik per agent + sync database ──
+const AGENT_ID=new URLSearchParams(location.search).get('agent')||'';
+const API_BASE=location.origin.indexOf('vercel.app')>-1?location.origin:'https://ignitex-learning-journey.vercel.app';
+let p1SyncTimer=null;
+function p1Key(){return AGENT_ID?'alj_p1list_'+AGENT_ID:'alj_p1list';}
+function p1SyncStatus(s){const el=document.getElementById('p1-sync');if(el)el.innerHTML=s;}
+function persistP1(){
+  localStorage.setItem(p1Key(),JSON.stringify(p1List));
+  if(!AGENT_ID)return;
+  p1SyncStatus('☁️ Menyimpan…');
+  clearTimeout(p1SyncTimer);
+  p1SyncTimer=setTimeout(function(){
+    fetch(API_BASE+'/api/p1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agentId:AGENT_ID,p1:p1List})})
+      .then(function(r){if(!r.ok)throw 0;p1SyncStatus('<span style="color:var(--green)">☁️ Tersimpan ✓</span>');})
+      .catch(function(){p1SyncStatus('<span style="color:var(--gold)">⚠️ Offline — tersimpan di HP</span>');});
+  },700);
+}
+function applyAgentHero(){
+  document.getElementById('sb-agent').textContent='👋 '+agentName;
+  var hi=document.querySelector('.hero-input');
+  if(hi)hi.innerHTML='<div style="flex:1;display:flex;align-items:center;font-size:14px;font-weight:600;color:#fff">👋 Halo, '+agentName+'! Link khusus kamu aktif — progress tersimpan otomatis.</div><button onclick="goTo(\'mod0\')">Mulai →</button>';
+}
+function initAgent(){
+  if(!AGENT_ID)return;
+  try{p1List=JSON.parse(localStorage.getItem(p1Key())||'[]');}catch(e){}
+  renderP1List();
+  fetch(API_BASE+'/api/agents?id='+encodeURIComponent(AGENT_ID))
+    .then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||'err');return d;});})
+    .then(function(d){
+      agentName=d.agent.name;
+      localStorage.setItem('alj_name',agentName);
+      if(Array.isArray(d.agent.p1)){p1List=d.agent.p1;localStorage.setItem(p1Key(),JSON.stringify(p1List));}
+      applyAgentHero();
+      renderP1List();
+      p1SyncStatus('<span style="color:var(--green)">☁️ Tersimpan ✓</span>');
+    })
+    .catch(function(){if(agentName)applyAgentHero();});
+}
+
 window.onload=function(){
   if(agentName){document.getElementById('name-input').value=agentName;document.getElementById('sb-agent').textContent='👋 '+agentName;}
   for(let i=0;i<TOTAL_MODS;i++){if(done[i])applyDone(i);}
@@ -2380,6 +2420,7 @@ window.onload=function(){
   initSlideshow();
   renderP1List();
   document.getElementById('p1-name-input').addEventListener('keydown',function(e){if(e.key==='Enter')addP1();});
+  initAgent();
 };
 
 function saveName(){let n=document.getElementById('name-input').value.trim();if(!n)return;agentName=n;localStorage.setItem('alj_name',n);document.getElementById('sb-agent').textContent='👋 '+n;goTo('mod0');}
@@ -2489,17 +2530,17 @@ function addP1(){
   if(!name){document.getElementById('p1-name-input').focus();return;}
   let cat=document.getElementById('p1-cat-input').value;
   p1List.push({id:Date.now(),name,cat,date:new Date().toLocaleDateString('id-ID'),met:false});
-  localStorage.setItem('alj_p1list',JSON.stringify(p1List));
+  persistP1();
   document.getElementById('p1-name-input').value='';
   renderP1List();
 }
-function deleteP1(id){p1List=p1List.filter(x=>x.id!==id);localStorage.setItem('alj_p1list',JSON.stringify(p1List));renderP1List();}
+function deleteP1(id){p1List=p1List.filter(x=>x.id!==id);persistP1();renderP1List();}
 function toggleMet(id){
   let it=p1List.find(x=>x.id===id);
   if(!it)return;
   it.met=!it.met;
   it.metDate=it.met?new Date().toLocaleDateString('id-ID'):null;
-  localStorage.setItem('alj_p1list',JSON.stringify(p1List));
+  persistP1();
   renderP1List();
 }
 function renderP1List(){
