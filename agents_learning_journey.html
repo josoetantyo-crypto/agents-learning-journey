@@ -550,6 +550,26 @@ tr:hover td{background:rgba(0,0,0,0.015)}
 .cp-unlock-pill strong{font-size:13px;font-weight:900;color:#fff}
 .cp-unlock-note{font-size:11px;color:#94A3B8;margin-top:9px;font-style:italic;display:flex;align-items:center;gap:5px}
 
+
+/* ── Mobile responsive fixes (HP & tablet) ── */
+@media(max-width:768px){
+  /* Tabel lebar: scroll horizontal, tidak keluar frame */
+  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+  /* Week cards: 2 kolom di HP */
+  .week-grid{grid-template-columns:repeat(2,1fr)}
+  /* Career Path header: income pindah ke baris sendiri, tidak numpuk */
+  .cp-header{flex-wrap:wrap;row-gap:4px}
+  .cp-income-preview{order:10;flex:0 0 100%;margin-left:0;text-align:left;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;border-top:1px dashed var(--border);padding-top:7px;margin-top:3px}
+  .cp-income-main{font-size:14px}
+  .cp-income-label{white-space:normal}
+  .cp-role-tagline{white-space:normal;overflow:visible;text-overflow:clip}
+  .cp-2col{grid-template-columns:1fr}
+  /* Total API row: boleh wrap, badge tidak keluar border */
+  .cpt-total-row{flex-wrap:wrap;row-gap:6px}
+  .cpt-total-api{flex:1 1 auto;font-size:13px;word-break:break-word}
+  .cpt-promo-pill{flex:0 0 auto}
+}
+
 </style>
 </head>
 <body>
@@ -914,7 +934,7 @@ tr:hover td{background:rgba(0,0,0,0.015)}
       <span class="year2-pill">Year 2: semua masih jalan ✅</span></p>
     </div>
     <hr class="divider">
-    <h3>&#128410; Career Path — Promosi Karena Performa</h3>
+    <h3>&#128640; Career Path — Promosi Karena Performa</h3>
     <div class="cp-section" style="margin-top:0">
 
       <!-- YEAR 1: AGENT -->
