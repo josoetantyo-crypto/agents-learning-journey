@@ -77,7 +77,17 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" id="admin-lock">
+    <h2>🔒 Area Admin</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Daftar agent &amp; hapus agent hanya untuk admin. Masukkan password:</p>
+    <div class="frow">
+      <input type="password" id="adm-pass" placeholder="Password admin..." onkeydown="if(event.key==='Enter')unlockAdmin()">
+      <button class="btn" onclick="unlockAdmin()">Buka</button>
+    </div>
+    <div class="err" id="adm-err"></div>
+  </div>
+
+  <div class="card" id="admin-area" style="display:none">
     <h2>👥 Daftar Agent <span class="refresh" onclick="loadAgents()">↻ Refresh</span></h2>
     <div id="agent-list"><div class="empty">Memuat...</div></div>
     <div class="note">Kolom P1 = jumlah nama yang sudah <strong>dicentang ketemu</strong> / total nama di list. Data live dari database — refresh untuk update terbaru.</div>
@@ -122,7 +132,7 @@ async function generate(){
 async function loadAgents(){
   const box=document.getElementById('agent-list');
   try{
-    const r=await fetch(API+'/agents');
+    const r=await fetch(API+'/agents',{headers:admHeaders()});
     const d=await r.json();
     if(!r.ok)throw new Error(d.error||'Gagal memuat');
     if(!d.agents.length){box.innerHTML='<div class="empty">Belum ada agent. Generate link pertama di atas! 🚀</div>';return;}
@@ -143,14 +153,35 @@ async function loadAgents(){
 
 async function delAgent(id,name){
   if(!confirm('Hapus agent "'+name+'"? Data P1-nya ikut terhapus.'))return;
-  await fetch(API+'/agents?id='+id,{method:'DELETE'});
+  await fetch(API+'/agents?id='+id,{method:'DELETE',headers:admHeaders()});
   toast('Agent dihapus');
   loadAgents();
 }
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 document.getElementById('g-wa').addEventListener('keydown',e=>{if(e.key==='Enter')generate();});
-loadAgents();
+
+// ── Admin area (password) ──
+let ADMIN_KEY=sessionStorage.getItem('adm_key')||'';
+function admHeaders(){return ADMIN_KEY?{'X-Admin-Key':ADMIN_KEY}:{};}
+async function unlockAdmin(){
+  const pass=document.getElementById('adm-pass').value;
+  const err=document.getElementById('adm-err');
+  err.style.display='none';
+  if(!pass)return;
+  const r=await fetch(API+'/agents',{headers:{'X-Admin-Key':pass}});
+  if(r.status===401){err.textContent='⚠️ Password salah.';err.style.display='block';return;}
+  ADMIN_KEY=pass;sessionStorage.setItem('adm_key',pass);
+  document.getElementById('admin-lock').style.display='none';
+  document.getElementById('admin-area').style.display='block';
+  loadAgents();
+}
+if(ADMIN_KEY){unlockAdmin0();}
+async function unlockAdmin0(){
+  const r=await fetch(API+'/agents',{headers:admHeaders()});
+  if(r.ok){document.getElementById('admin-lock').style.display='none';document.getElementById('admin-area').style.display='block';loadAgents();}
+  else{sessionStorage.removeItem('adm_key');ADMIN_KEY='';}
+}
 </script>
 </body>
 </html>

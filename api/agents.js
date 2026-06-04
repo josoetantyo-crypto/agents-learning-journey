@@ -7,7 +7,7 @@ const PREFIX = 'agents/';
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Key');
   res.setHeader('Cache-Control', 'no-store');
 }
 
@@ -26,6 +26,11 @@ async function writeAgent(agent, { overwrite }) {
     contentType: 'application/json',
     cacheControlMaxAge: 60,
   });
+}
+
+function isAdmin(req) {
+  const key = process.env.ADMIN_KEY || '';
+  return key && req.headers['x-admin-key'] === key;
 }
 
 export default async function handler(req, res) {
@@ -61,7 +66,8 @@ export default async function handler(req, res) {
         if (!agent) return res.status(404).json({ error: 'Agent tidak ditemukan' });
         return res.status(200).json({ agent });
       }
-      // List semua agent + ringkasan progress P1
+      // List semua agent + ringkasan progress P1 — khusus admin
+      if (!isAdmin(req)) return res.status(401).json({ error: 'Password admin salah' });
       const blobs = [];
       let cursor;
       do {
@@ -100,6 +106,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'DELETE') {
+      if (!isAdmin(req)) return res.status(401).json({ error: 'Password admin salah' });
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'id wajib' });
       await del(PREFIX + String(id) + '.json');
