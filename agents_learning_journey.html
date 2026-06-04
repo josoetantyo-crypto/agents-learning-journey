@@ -2387,9 +2387,26 @@ function persistP1(){
   clearTimeout(p1SyncTimer);
   p1SyncTimer=setTimeout(function(){
     fetch(API_BASE+'/api/p1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agentId:AGENT_ID,p1:p1List})})
-      .then(function(r){if(!r.ok)throw 0;p1SyncStatus('<span style="color:var(--green)">☁️ Tersimpan ✓</span>');})
+      .then(function(r){if(r.status===404){agentInactive();return;}if(!r.ok)throw 0;p1SyncStatus('<span style="color:var(--green)">☁️ Tersimpan ✓</span>');})
       .catch(function(){p1SyncStatus('<span style="color:var(--gold)">⚠️ Offline — tersimpan di HP</span>');});
   },700);
+}
+function agentInactive(){
+  localStorage.removeItem(p1Key());
+  localStorage.removeItem('alj_name');
+  agentName='';
+  p1List=[];
+  renderP1List();
+  var ni=document.getElementById('name-input');if(ni)ni.value='';
+  var sa=document.getElementById('sb-agent');if(sa)sa.textContent='';
+  var hi=document.querySelector('.hero-input');
+  if(hi&&!document.getElementById('agent-inactive-note')){
+    var w=document.createElement('div');
+    w.id='agent-inactive-note';
+    w.style.cssText='margin-top:12px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.25);border-radius:9px;padding:10px 14px;font-size:12.5px;font-weight:600;color:#FFE3B3';
+    w.textContent='⚠️ Link agent ini sudah tidak aktif. Hubungi leader kamu untuk mendapatkan link baru.';
+    hi.parentNode.insertBefore(w,hi);
+  }
 }
 function applyAgentHero(){
   document.getElementById('sb-agent').textContent='👋 '+agentName;
@@ -2401,8 +2418,12 @@ function initAgent(){
   try{p1List=JSON.parse(localStorage.getItem(p1Key())||'[]');}catch(e){}
   renderP1List();
   fetch(API_BASE+'/api/agents?id='+encodeURIComponent(AGENT_ID))
-    .then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||'err');return d;});})
+    .then(function(r){
+      if(r.status===404){agentInactive();return null;}
+      return r.json().then(function(d){if(!r.ok)throw new Error(d.error||'err');return d;});
+    })
     .then(function(d){
+      if(!d)return;
       agentName=d.agent.name;
       localStorage.setItem('alj_name',agentName);
       if(Array.isArray(d.agent.p1)){p1List=d.agent.p1;localStorage.setItem(p1Key(),JSON.stringify(p1List));}
