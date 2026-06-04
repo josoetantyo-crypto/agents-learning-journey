@@ -2396,17 +2396,15 @@ function agentInactive(){
   localStorage.removeItem('alj_name');
   agentName='';
   p1List=[];
-  renderP1List();
-  var ni=document.getElementById('name-input');if(ni)ni.value='';
-  var sa=document.getElementById('sb-agent');if(sa)sa.textContent='';
-  var hi=document.querySelector('.hero-input');
-  if(hi&&!document.getElementById('agent-inactive-note')){
-    var w=document.createElement('div');
-    w.id='agent-inactive-note';
-    w.style.cssText='margin-top:12px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.25);border-radius:9px;padding:10px 14px;font-size:12.5px;font-weight:600;color:#FFE3B3';
-    w.textContent='⚠️ Link agent ini sudah tidak aktif. Hubungi leader kamu untuk mendapatkan link baru.';
-    hi.parentNode.insertBefore(w,hi);
-  }
+  // Blokir total: ganti seluruh halaman dengan layar nonaktif
+  document.body.innerHTML='<div style="min-height:100vh;background:#000;display:flex;align-items:center;justify-content:center;padding:24px;font-family:\'Poppins\',sans-serif">'+
+    '<div style="max-width:420px;width:100%;background:#111;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:38px 28px;text-align:center">'+
+    '<div style="font-size:44px;margin-bottom:14px">🔒</div>'+
+    '<div style="font-size:18px;font-weight:800;color:#fff;margin-bottom:10px">Link Tidak Aktif</div>'+
+    '<div style="font-size:13px;line-height:1.7;color:rgba(255,255,255,.65)">Link agent ini sudah dihapus atau tidak aktif.<br>Hubungi leader kamu untuk mendapatkan link baru.</div>'+
+    '<div style="margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,.1);font-size:11px;letter-spacing:2px;color:rgba(255,255,255,.4);font-weight:700">IGNITEX — AGENTS LEARNING JOURNEY</div>'+
+    '</div></div>';
+  window.scrollTo(0,0);
 }
 function applyAgentHero(){
   document.getElementById('sb-agent').textContent='👋 '+agentName;
