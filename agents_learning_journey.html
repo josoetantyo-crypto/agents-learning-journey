@@ -2386,25 +2386,27 @@ function persistP1(){
   p1SyncStatus('☁️ Menyimpan…');
   clearTimeout(p1SyncTimer);
   p1SyncTimer=setTimeout(function(){
-    fetch(API_BASE+'/api/p1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agentId:AGENT_ID,p1:p1List})})
+    fetch(API_BASE+'/api/p1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agentId:AGENT_ID,p1:p1List,state:buildState()})})
       .then(function(r){if(r.status===404){agentInactive();return;}if(!r.ok)throw 0;p1SyncStatus('<span style="color:var(--green)">☁️ Tersimpan ✓</span>');})
       .catch(function(){p1SyncStatus('<span style="color:var(--gold)">⚠️ Offline — tersimpan di HP</span>');});
   },700);
+}
+function agentLock(title,msg){
+  document.body.innerHTML='<div style="min-height:100vh;background:#000;display:flex;align-items:center;justify-content:center;padding:24px;font-family:\'Poppins\',sans-serif">'+
+    '<div style="max-width:420px;width:100%;background:#111;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:38px 28px;text-align:center">'+
+    '<div style="font-size:44px;margin-bottom:14px">🔒</div>'+
+    '<div style="font-size:18px;font-weight:800;color:#fff;margin-bottom:10px">'+title+'</div>'+
+    '<div style="font-size:13px;line-height:1.7;color:rgba(255,255,255,.65)">'+msg+'</div>'+
+    '<div style="margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,.1);font-size:11px;letter-spacing:2px;color:rgba(255,255,255,.4);font-weight:700">IGNITEX — AGENTS LEARNING JOURNEY</div>'+
+    '</div></div>';
+  window.scrollTo(0,0);
 }
 function agentInactive(){
   localStorage.removeItem(p1Key());
   localStorage.removeItem('alj_name');
   agentName='';
   p1List=[];
-  // Blokir total: ganti seluruh halaman dengan layar nonaktif
-  document.body.innerHTML='<div style="min-height:100vh;background:#000;display:flex;align-items:center;justify-content:center;padding:24px;font-family:\'Poppins\',sans-serif">'+
-    '<div style="max-width:420px;width:100%;background:#111;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:38px 28px;text-align:center">'+
-    '<div style="font-size:44px;margin-bottom:14px">🔒</div>'+
-    '<div style="font-size:18px;font-weight:800;color:#fff;margin-bottom:10px">Link Tidak Aktif</div>'+
-    '<div style="font-size:13px;line-height:1.7;color:rgba(255,255,255,.65)">Link agent ini sudah dihapus atau tidak aktif.<br>Hubungi leader kamu untuk mendapatkan link baru.</div>'+
-    '<div style="margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,.1);font-size:11px;letter-spacing:2px;color:rgba(255,255,255,.4);font-weight:700">IGNITEX — AGENTS LEARNING JOURNEY</div>'+
-    '</div></div>';
-  window.scrollTo(0,0);
+  agentLock('Link Tidak Aktif','Link agent ini sudah dihapus atau tidak aktif.<br>Hubungi leader kamu untuk mendapatkan link baru.');
 }
 function applyAgentHero(){
   document.getElementById('sb-agent').textContent='👋 '+agentName;
@@ -2412,7 +2414,7 @@ function applyAgentHero(){
   if(hi)hi.innerHTML='<div style="flex:1;display:flex;align-items:center;font-size:15px;font-weight:700;color:#fff">👋 Halo, '+agentName+'!</div><button onclick="goTo(\'mod0\')">Mulai →</button>';
 }
 function initAgent(){
-  if(!AGENT_ID)return;
+  if(!AGENT_ID){agentLock('Akses Khusus Agent','Halaman ini hanya bisa dibuka lewat link khusus dari leader kamu.<br>Belum punya link? Hubungi leader kamu untuk dibuatkan.');return;}
   try{p1List=JSON.parse(localStorage.getItem(p1Key())||'[]');}catch(e){}
   renderP1List();
   fetch(API_BASE+'/api/agents?id='+encodeURIComponent(AGENT_ID))
@@ -2425,12 +2427,48 @@ function initAgent(){
       agentName=d.agent.name;
       localStorage.setItem('alj_name',agentName);
       if(Array.isArray(d.agent.p1)){p1List=d.agent.p1;localStorage.setItem(p1Key(),JSON.stringify(p1List));}
+      if(d.agent.state)restoreState(d.agent.state);
       applyAgentHero();
       renderP1List();
       p1SyncStatus('<span style="color:var(--green)">☁️ Tersimpan ✓</span>');
     })
     .catch(function(){if(agentName)applyAgentHero();});
 }
+
+
+// ── State lengkap: done + goal setting ──
+function buildState(){
+  try{
+    var cn=document.getElementById('gn-custom');
+    return {done:done,gs:{goals:gsGoals,living:gsLiving,tl:gsTimeline,premi:gsPremi,ratio:gsRatio,customName:cn?cn.value:''}};
+  }catch(e){return null;}
+}
+function restoreState(s){
+  try{
+    if(s.done){done=Object.assign({},done,s.done);localStorage.setItem('alj_done',JSON.stringify(done));for(var i=0;i<TOTAL_MODS;i++){if(done[i])applyDone(i);}updateProgress();}
+    var g=s.gs||{};
+    if(g.goals)Object.keys(g.goals).forEach(function(k){
+      if(gsGoals[k]===undefined&&gsGoalDefs[k])gsToggleGoal(k);
+      var sv=g.goals[k]||{};
+      var pi=document.getElementById('gp-'+k);
+      if(pi&&sv.price){pi.value=String(sv.price).replace(/\B(?=(\d{3})+(?!\d))/g,'.');pi.dispatchEvent(new Event('input'));}
+      var tb=document.querySelector('#gd-'+k+' .gs-param-btn[data-months="'+sv.timeline+'"]');
+      if(tb)tb.click();else if(gsGoals[k]&&sv.timeline)gsGoals[k].timeline=sv.timeline;
+    });
+    if(g.customName){var cn=document.getElementById('gn-custom');if(cn)cn.value=g.customName;}
+    if(g.living){var li=document.getElementById('gs-living');if(li){li.value=String(g.living).replace(/\B(?=(\d{3})+(?!\d))/g,'.');li.dispatchEvent(new Event('input'));}}
+    [['#gs-tl-btns .gs-timeline-btn','gsSelectTimeline',g.tl],['#gs-premi-btns .gs-param-btn','gsSelectPremi',g.premi],['#gs-ratio-btns .gs-param-btn','gsSelectRatio',g.ratio]].forEach(function(c){
+      if(!c[2])return;
+      document.querySelectorAll(c[0]).forEach(function(b){if((b.getAttribute('onclick')||'')===c[1]+'(this,'+c[2]+')')b.click();});
+    });
+    gsRefreshTotal();
+  }catch(e){}
+}
+// Auto-sync: setiap aksi penting ikut tersimpan ke database
+['markDone','gsToggleGoal','gsSelectTimeline','gsSelectPremi','gsSelectRatio','gsRefreshTotal','gsUpdateIncomeDisplay'].forEach(function(fn){
+  var orig=window[fn];
+  if(typeof orig==='function')window[fn]=function(){var r=orig.apply(this,arguments);if(AGENT_ID)persistP1();return r;};
+});
 
 window.onload=function(){
   if(agentName){document.getElementById('name-input').value=agentName;document.getElementById('sb-agent').textContent='👋 '+agentName;}

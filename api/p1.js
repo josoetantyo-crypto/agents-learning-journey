@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { agentId, p1 } = req.body || {};
+    const { agentId, p1, state } = req.body || {};
     if (!agentId || !Array.isArray(p1)) {
       return res.status(400).json({ error: 'agentId dan p1 (array) wajib' });
     }
@@ -36,6 +36,11 @@ export default async function handler(req, res) {
       met: !!x.met,
       metDate: x.metDate ? String(x.metDate).slice(0, 20) : null,
     }));
+    // State tambahan: modul selesai + goal setting (cap 30KB)
+    if (state && typeof state === 'object') {
+      const raw = JSON.stringify(state);
+      if (raw.length <= 30000) agent.state = JSON.parse(raw);
+    }
     agent.updatedAt = new Date().toISOString();
 
     await put(PREFIX + agent.id + '.json', JSON.stringify(agent), {
