@@ -2376,7 +2376,7 @@ const TOTAL_MODS=12;
 
 // ── Agent mode: link unik per agent + sync database ──
 const AGENT_ID=new URLSearchParams(location.search).get('agent')||'';
-const API_BASE=location.origin.indexOf('vercel.app')>-1?location.origin:'https://ignitex-learning-journey.vercel.app';
+const API_BASE=location.origin.indexOf('vercel.app')>-1?location.origin:'https://ignitex-agents-learning-journey.vercel.app';
 let p1SyncTimer=null;
 function p1Key(){return AGENT_ID?'alj_p1list_'+AGENT_ID:'alj_p1list';}
 function p1SyncStatus(s){const el=document.getElementById('p1-sync');if(el)el.innerHTML=s;}
