@@ -71,8 +71,8 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
       <div class="rname" id="r-name"></div>
       <div class="rlink" id="r-link"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-sm btn-ghost" onclick="copyLink(document.getElementById('r-link').textContent)">📋 Copy Link</button>
-        <button class="btn btn-sm btn-wa" id="r-wa-btn">💬 Kirim via WhatsApp</button>
+        <button class="btn btn-sm btn-ghost" onclick="copyLink(document.getElementById('r-link').textContent)">Copy Link</button>
+        <button class="btn btn-sm btn-wa" id="r-wa-btn">Kirim via WhatsApp</button>
       </div>
     </div>
   </div>
@@ -142,8 +142,8 @@ async function loadAgents(){
         <div class="a-info"><div class="a-name">${esc(a.name)}</div><div class="a-wa">📱 ${esc(a.wa)} · ${(a.createdAt||'').slice(0,10)}</div></div>
         <div class="a-prog"><div class="n ${a.p1Met>=8?'done':''}">${a.p1Met}/${a.p1Total}</div><div class="l">P1 ketemu/list</div></div>
         <div class="a-actions">
-          <button class="btn btn-sm btn-ghost" onclick="copyLink('${link}')">📋</button>
-          <button class="btn btn-sm btn-wa" onclick="window.open(waUrl('${esc(a.wa)}','${esc(a.name).replace(/'/g,"\\'")}','${link}'),'_blank')">💬</button>
+          <button class="btn btn-sm btn-ghost" onclick="copyLink('${link}')">Copy Link</button>
+          <button class="btn btn-sm btn-wa" onclick="window.open(waUrl('${esc(a.wa)}','${esc(a.name).replace(/'/g,"\\'")}','${link}'),'_blank')">Kirim WA</button>
           <button class="btn-del" title="Hapus agent" onclick="delAgent('${a.id}','${esc(a.name).replace(/'/g,"\\'")}')">×</button>
         </div>
       </div>`;
