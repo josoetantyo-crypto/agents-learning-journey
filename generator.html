@@ -11,20 +11,24 @@
 <meta name="description" content="Generate link unik untuk agent baru IgniteX — Agents Learning Journey">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--red:#C8102E;--red-dark:#9B0B22;--bg:#F4F5F7;--card:#fff;--border:#E2E8F0;--text:#1E293B;--muted:#64748B;--green:#059669}
+:root{--red:#C8102E;--red-dark:#9B0B22;--bg:#F4F5F7;--card:#fff;--border:#E2E8F0;--text:#1E293B;--muted:#64748B;--green:#059669;--amber:#D97706}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Poppins',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-.topbar{background:#000;color:#fff;padding:14px 20px;display:flex;align-items:center;gap:10px}
+.topbar{background:#000;color:#fff;padding:14px 20px;display:flex;align-items:center;gap:10px;justify-content:space-between}
 .topbar .brand{font-size:17px;font-weight:800;letter-spacing:.5px}
 .topbar .sub{font-size:11px;color:rgba(255,255,255,.6)}
-.wrap{max-width:860px;margin:0 auto;padding:22px 16px 60px}
+.topbar .who{font-size:12px;color:rgba(255,255,255,.85);text-align:right}
+.topbar .who .role{font-size:10px;color:rgba(255,255,255,.5)}
+.btn-logout{background:none;border:1px solid rgba(255,255,255,.3);color:#fff;font-family:inherit;font-size:11px;padding:6px 12px;border-radius:7px;cursor:pointer;margin-left:10px}
+.btn-logout:hover{border-color:#fff}
+.wrap{max-width:920px;margin:0 auto;padding:22px 16px 60px}
 h1{font-size:20px;font-weight:800;margin-bottom:4px}
 .lead{font-size:13px;color:var(--muted);margin-bottom:20px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:18px}
 .card h2{font-size:14px;font-weight:700;margin-bottom:14px}
 .frow{display:flex;gap:10px;flex-wrap:wrap}
-.frow input{flex:1;min-width:180px;padding:11px 14px;border:1.5px solid var(--border);border-radius:9px;font-family:inherit;font-size:13px;outline:none}
-.frow input:focus{border-color:var(--red)}
+.frow input,.frow select{flex:1;min-width:160px;padding:11px 14px;border:1.5px solid var(--border);border-radius:9px;font-family:inherit;font-size:13px;outline:none;background:#fff}
+.frow input:focus,.frow select:focus{border-color:var(--red)}
 .btn{padding:11px 20px;background:var(--red);color:#fff;border:none;border-radius:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
 .btn:hover{background:var(--red-dark)}
 .btn:disabled{opacity:.5;cursor:wait}
@@ -40,13 +44,22 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
 .result .rname{font-weight:700;font-size:14px;color:var(--green);margin-bottom:6px}
 .result .rlink{font-family:monospace;font-size:12px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 12px;word-break:break-all;margin-bottom:10px}
 .err{display:none;margin-top:12px;font-size:12.5px;color:var(--red);font-weight:600}
+.ok-msg{display:none;margin-top:12px;font-size:12.5px;color:var(--green);font-weight:600}
 .agent-row{display:flex;align-items:center;gap:10px;padding:13px 4px;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .agent-row:last-child{border-bottom:none}
 .a-info{flex:1;min-width:150px}
 .a-name{font-size:13.5px;font-weight:700}
 .a-wa{font-size:11.5px;color:var(--muted)}
+.a-leader{font-size:10.5px;color:#fff;background:var(--muted);border-radius:5px;padding:1px 7px;display:inline-block;margin-top:3px}
+.a-leader.orphan{background:var(--amber)}
+.a-status{text-align:center;min-width:96px}
+.badge{display:inline-block;font-size:10.5px;font-weight:700;border-radius:6px;padding:3px 9px}
+.badge.off{background:#f1f5f9;color:var(--muted)}
+.badge.on{background:#ecfdf5;color:var(--green)}
+.a-status .l{font-size:10px;color:var(--muted);margin-top:2px}
 .a-prog{text-align:center;min-width:88px}
 .a-prog .n{font-size:15px;font-weight:800;color:var(--red)}
+.a-prog .n.zero{color:var(--muted);font-weight:600}
 .a-prog .n.done{color:var(--green)}
 .a-prog .l{font-size:10px;color:var(--muted)}
 .a-actions{display:flex;gap:7px;align-items:center}
@@ -55,49 +68,135 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
 .refresh{float:right;font-size:11.5px;color:var(--red);cursor:pointer;font-weight:600;user-select:none}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#000;color:#fff;font-size:12.5px;padding:10px 20px;border-radius:24px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:99}
 .toast.show{opacity:1}
-@media(max-width:560px){.a-prog{min-width:70px}}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 10px;text-align:center}
+.stat .v{font-size:22px;font-weight:800;color:var(--red)}
+.stat.green .v{color:var(--green)}
+.stat .t{font-size:10.5px;color:var(--muted);font-weight:600;margin-top:2px;line-height:1.3}
+.login-box{max-width:420px;margin:40px auto 0}
+.login-box .card{padding:26px}
+.login-box h1{text-align:center}
+.login-box .lead{text-align:center}
+.login-box input{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:9px;font-family:inherit;font-size:13.5px;outline:none;margin-bottom:10px}
+.login-box input:focus{border-color:var(--red)}
+.login-box .btn{width:100%;padding:13px}
+.admin-toggle{text-align:center;margin-top:16px;font-size:12px;color:var(--muted)}
+.admin-toggle a{color:var(--red);font-weight:600;cursor:pointer;text-decoration:none}
+.leader-row{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.leader-row:last-child{border-bottom:none}
+.l-info{flex:1;min-width:150px}
+.l-name{font-size:13px;font-weight:700}
+.l-id{font-size:11.5px;color:var(--muted);font-family:monospace}
+.view{display:none}
+.view.active{display:block}
+@media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}.a-status{min-width:80px}.a-prog{min-width:70px}}
 </style>
 </head>
 <body>
-<div class="topbar"><div><div class="brand">IGNITEX</div><div class="sub">Agent Generator — khusus leader</div></div></div>
-<div class="wrap">
-  <h1>🔗 Agent Generator</h1>
-  <p class="lead">Buat link unik untuk setiap agent baru. Agent buka link-nya → nama langsung muncul di dashboard → name list &amp; progress P1 tersimpan otomatis ke database.</p>
-
-  <div class="card">
-    <h2>➕ Generate Link Agent Baru</h2>
-    <div class="frow">
-      <input type="text" id="g-name" placeholder="Nama agent..." maxlength="60">
-      <input type="tel" id="g-wa" placeholder="No WA (08xxx / 628xxx)" maxlength="20">
-      <button class="btn" id="g-btn" onclick="generate()">Generate Link</button>
-    </div>
-    <div class="err" id="g-err"></div>
-    <div class="result" id="g-result">
-      <div class="rname" id="r-name"></div>
-      <div class="rlink" id="r-link"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-sm btn-ghost" onclick="copyLink(document.getElementById('r-link').textContent)">Copy Link</button>
-        <button class="btn btn-sm btn-wa" id="r-wa-btn">Kirim via WhatsApp</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="card" id="admin-lock">
-    <h2>🔒 Area Admin</h2>
-    <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Daftar agent &amp; hapus agent hanya untuk admin. Masukkan password:</p>
-    <div class="frow">
-      <input type="password" id="adm-pass" placeholder="Password admin..." onkeydown="if(event.key==='Enter')unlockAdmin()">
-      <button class="btn" onclick="unlockAdmin()">Buka</button>
-    </div>
-    <div class="err" id="adm-err"></div>
-  </div>
-
-  <div class="card" id="admin-area" style="display:none">
-    <h2>👥 Daftar Agent <span class="refresh" onclick="loadAgents()">↻ Refresh</span></h2>
-    <div id="agent-list"><div class="empty">Memuat...</div></div>
-    <div class="note">Kolom P1 = jumlah nama yang sudah <strong>dicentang ketemu</strong> / total nama di list. Data live dari database — refresh untuk update terbaru.</div>
+<div class="topbar">
+  <div><div class="brand">IGNITEX</div><div class="sub">Learning Journey Generator</div></div>
+  <div id="top-user" style="display:none;align-items:center">
+    <div class="who"><div id="top-name"></div><div class="role" id="top-role"></div></div>
+    <button class="btn-logout" onclick="logout()">Keluar</button>
   </div>
 </div>
+
+<!-- ════════ VIEW: LOGIN ════════ -->
+<div class="view active" id="view-login">
+  <div class="login-box">
+    <h1>🔗 Learning Journey Generator</h1>
+    <p class="lead">Masuk untuk membuat &amp; memantau link agent kamu.</p>
+    <div class="card" id="login-leader">
+      <h2>👤 Login Leader</h2>
+      <input type="text" id="li-id" placeholder="ID leader..." autocomplete="username">
+      <input type="password" id="li-pass" placeholder="Password..." autocomplete="current-password" onkeydown="if(event.key==='Enter')loginLeader()">
+      <button class="btn" id="li-btn" onclick="loginLeader()">Masuk</button>
+      <div class="err" id="li-err"></div>
+      <div class="admin-toggle">Admin? <a onclick="showAdminLogin()">Masuk sebagai admin</a></div>
+    </div>
+    <div class="card" id="login-admin" style="display:none">
+      <h2>🔑 Login Admin</h2>
+      <input type="password" id="la-pass" placeholder="Password admin..." onkeydown="if(event.key==='Enter')loginAdmin()">
+      <button class="btn" id="la-btn" onclick="loginAdmin()">Masuk</button>
+      <div class="err" id="la-err"></div>
+      <div class="admin-toggle"><a onclick="showLeaderLogin()">← Kembali ke login leader</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ VIEW: LEADER ════════ -->
+<div class="view" id="view-leader">
+  <div class="wrap">
+    <h1 id="ld-hello">Halo!</h1>
+    <p class="lead">Buat link unik untuk agent baru &amp; pantau aktivasinya — semua data di bawah ini khusus agent yang kamu buat.</p>
+
+    <div class="stats" id="ld-stats"></div>
+
+    <div class="card">
+      <h2>➕ Generate Link Agent Baru</h2>
+      <div class="frow">
+        <input type="text" id="g-name" placeholder="Nama agent..." maxlength="60">
+        <input type="tel" id="g-wa" placeholder="No WA (08xxx / 628xxx)" maxlength="20">
+        <button class="btn" id="g-btn" onclick="generate()">Generate Link</button>
+      </div>
+      <div class="err" id="g-err"></div>
+      <div class="result" id="g-result">
+        <div class="rname" id="r-name"></div>
+        <div class="rlink" id="r-link"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-ghost" onclick="copyLink(document.getElementById('r-link').textContent)">Copy Link</button>
+          <button class="btn btn-sm btn-wa" id="r-wa-btn">Kirim via WhatsApp</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>👥 Agent Saya <span class="refresh" onclick="loadAgents()">↻ Refresh</span></h2>
+      <div id="ld-agent-list"><div class="empty">Memuat...</div></div>
+      <div class="note"><strong>Status</strong> = agent sudah membuka link dashboard-nya atau belum. <strong>P1</strong> = nama yang sudah dicentang ketemu / total nama di list. Data live dari database — refresh untuk update terbaru.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ VIEW: ADMIN ════════ -->
+<div class="view" id="view-admin">
+  <div class="wrap">
+    <h1>🛠️ Panel Admin</h1>
+    <p class="lead">Kelola akun leader &amp; pantau semua agent dari seluruh leader.</p>
+
+    <div class="stats" id="ad-stats"></div>
+
+    <div class="card">
+      <h2>👔 Kelola Leader</h2>
+      <div class="frow">
+        <input type="text" id="nl-id" placeholder="ID leader (tanpa spasi)..." maxlength="30">
+        <input type="text" id="nl-name" placeholder="Nama leader..." maxlength="60">
+        <input type="text" id="nl-pass" placeholder="Password (min 6)..." maxlength="60">
+        <button class="btn" id="nl-btn" onclick="createLeader()">Buat Leader</button>
+      </div>
+      <div class="err" id="nl-err"></div>
+      <div class="ok-msg" id="nl-ok"></div>
+      <div id="leader-list" style="margin-top:14px"><div class="empty">Memuat...</div></div>
+      <div class="note">Leader login di halaman ini pakai ID + password di atas. Hapus leader tidak menghapus agent-nya — agent jadi "tanpa leader" dan tetap terlihat di sini.</div>
+    </div>
+
+    <div class="card" id="orphan-card" style="display:none">
+      <h2>⚠️ Agent Tanpa Leader</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Ada <strong id="orphan-count">0</strong> agent yang belum terhubung ke leader mana pun. Pindahkan semuanya ke salah satu leader:</p>
+      <div class="frow">
+        <select id="orphan-target"></select>
+        <button class="btn" id="orphan-btn" onclick="assignOrphans()">Pindahkan Semua</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>👥 Semua Agent <span class="refresh" onclick="loadAgents()">↻ Refresh</span></h2>
+      <div id="ad-agent-list"><div class="empty">Memuat...</div></div>
+      <div class="note"><strong>Status</strong> = agent sudah membuka link dashboard-nya atau belum. <strong>P1</strong> = nama dicentang ketemu / total nama di list.</div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -105,13 +204,98 @@ const CANON = 'https://ignitex-agents-learning-journey.vercel.app';
 const API = (location.origin.indexOf('vercel.app') > -1 ? location.origin : CANON) + '/api';
 const DASH = CANON + '/';
 
+// ── Sesi ──
+let LEADER_TOKEN = localStorage.getItem('leader_token') || '';
+let LEADER = JSON.parse(localStorage.getItem('leader_info') || 'null');
+let ADMIN_KEY = sessionStorage.getItem('adm_key') || '';
+let LEADERS_CACHE = [];
+
+function authHeaders(){
+  if (ADMIN_KEY) return {'X-Admin-Key': ADMIN_KEY};
+  if (LEADER_TOKEN) return {'X-Leader-Token': LEADER_TOKEN};
+  return {};
+}
+
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 function copyLink(text){navigator.clipboard.writeText(text).then(()=>toast('Link tersalin ✓'));}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function waUrl(wa, name, link){
   const msg = 'Halo '+name+'! 👋\n\nIni link Agents Learning Journey khusus kamu — buka, nama kamu langsung muncul, dan progress kamu tersimpan otomatis:\n\n'+link+'\n\nSemangat! 🚀';
   return 'https://wa.me/'+wa+'?text='+encodeURIComponent(msg);
 }
 
+// ── Navigasi view ──
+function showView(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  const top=document.getElementById('top-user');
+  if(name==='login'){top.style.display='none';}
+  else{
+    top.style.display='flex';
+    document.getElementById('top-name').textContent = name==='admin' ? 'Admin' : (LEADER?LEADER.name:'');
+    document.getElementById('top-role').textContent = name==='admin' ? 'super admin' : 'leader · '+(LEADER?LEADER.id:'');
+  }
+}
+function showAdminLogin(){document.getElementById('login-leader').style.display='none';document.getElementById('login-admin').style.display='block';}
+function showLeaderLogin(){document.getElementById('login-admin').style.display='none';document.getElementById('login-leader').style.display='block';}
+
+function logout(){
+  LEADER_TOKEN='';LEADER=null;ADMIN_KEY='';
+  localStorage.removeItem('leader_token');localStorage.removeItem('leader_info');
+  sessionStorage.removeItem('adm_key');
+  showView('login');
+}
+
+// ── Login ──
+async function loginLeader(){
+  const id=document.getElementById('li-id').value.trim();
+  const pass=document.getElementById('li-pass').value;
+  const err=document.getElementById('li-err'), btn=document.getElementById('li-btn');
+  err.style.display='none';
+  if(!id||!pass){err.textContent='ID dan password wajib diisi.';err.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Masuk...';
+  try{
+    const r=await fetch(API+'/leaders?action=login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,password:pass})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Gagal login');
+    LEADER_TOKEN=d.token;LEADER=d.leader;
+    localStorage.setItem('leader_token',LEADER_TOKEN);
+    localStorage.setItem('leader_info',JSON.stringify(LEADER));
+    document.getElementById('li-pass').value='';
+    enterLeader();
+  }catch(e){err.textContent='⚠️ '+e.message;err.style.display='block';}
+  btn.disabled=false;btn.textContent='Masuk';
+}
+
+async function loginAdmin(){
+  const pass=document.getElementById('la-pass').value;
+  const err=document.getElementById('la-err'), btn=document.getElementById('la-btn');
+  err.style.display='none';
+  if(!pass)return;
+  btn.disabled=true;btn.textContent='Masuk...';
+  try{
+    const r=await fetch(API+'/leaders',{headers:{'X-Admin-Key':pass}});
+    if(r.status===401)throw new Error('Password admin salah.');
+    if(!r.ok)throw new Error('Gagal login');
+    ADMIN_KEY=pass;sessionStorage.setItem('adm_key',pass);
+    document.getElementById('la-pass').value='';
+    enterAdmin();
+  }catch(e){err.textContent='⚠️ '+e.message;err.style.display='block';}
+  btn.disabled=false;btn.textContent='Masuk';
+}
+
+function enterLeader(){
+  document.getElementById('ld-hello').textContent='Halo, '+LEADER.name+'!';
+  showView('leader');
+  loadAgents();
+}
+function enterAdmin(){
+  showView('admin');
+  loadLeaders();
+  loadAgents();
+}
+
+// ── Generate agent ──
 async function generate(){
   const name=document.getElementById('g-name').value.trim();
   const wa=document.getElementById('g-wa').value.trim();
@@ -120,8 +304,9 @@ async function generate(){
   if(!name||!wa){err.textContent='Nama dan No WA wajib diisi.';err.style.display='block';return;}
   btn.disabled=true;btn.textContent='Membuat...';
   try{
-    const r=await fetch(API+'/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,wa})});
+    const r=await fetch(API+'/agents',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({name,wa})});
     const d=await r.json();
+    if(r.status===401){logout();throw new Error('Sesi habis — login ulang ya.');}
     if(!r.ok)throw new Error(d.error||'Gagal membuat agent');
     const link=DASH+'?agent='+d.agent.id;
     document.getElementById('r-name').textContent='✅ '+d.agent.name;
@@ -134,59 +319,175 @@ async function generate(){
   btn.disabled=false;btn.textContent='Generate Link';
 }
 
+// ── Daftar agent + stats ──
+function statCards(agents){
+  const total=agents.length;
+  const opened=agents.filter(a=>a.activatedAt).length;
+  const started=agents.filter(a=>a.p1Total>0).length;
+  const done=agents.filter(a=>a.p1Met>=8).length;
+  return `
+    <div class="stat"><div class="v">${total}</div><div class="t">Total Agent</div></div>
+    <div class="stat green"><div class="v">${opened}</div><div class="t">Sudah Buka Link</div></div>
+    <div class="stat"><div class="v">${started}</div><div class="t">Mulai Isi P1</div></div>
+    <div class="stat green"><div class="v">${done}</div><div class="t">P1 Selesai (≥8 ketemu)</div></div>`;
+}
+
+function agentRow(a, isAdminView){
+  const link=DASH+'?agent='+a.id;
+  const safeName=esc(a.name).replace(/'/g,"\\'");
+  const status=a.activatedAt
+    ? `<span class="badge on">🟢 Aktif</span><div class="l">${(a.activatedAt||'').slice(0,10)}</div>`
+    : `<span class="badge off">⚪ Belum buka</span>`;
+  let leaderTag='';
+  if(isAdminView){
+    if(a.leaderId){
+      const l=LEADERS_CACHE.find(x=>x.id===a.leaderId);
+      leaderTag=`<div class="a-leader">👔 ${esc(l?l.name:a.leaderId)}</div>`;
+    }else{
+      leaderTag=`<div class="a-leader orphan">tanpa leader</div>`;
+    }
+  }
+  const nClass=a.p1Met>=8?'done':(a.p1Total===0?'zero':'');
+  const p1Text=a.p1Total===0?'–':`${a.p1Met}/${a.p1Total}`;
+  return `<div class="agent-row">
+    <div class="a-info"><div class="a-name">${esc(a.name)}</div><div class="a-wa">📱 ${esc(a.wa)} · ${(a.createdAt||'').slice(0,10)}</div>${leaderTag}</div>
+    <div class="a-status">${status}</div>
+    <div class="a-prog"><div class="n ${nClass}">${p1Text}</div><div class="l">P1 ketemu/list</div></div>
+    <div class="a-actions">
+      <button class="btn btn-sm btn-ghost" onclick="copyLink('${link}')">Copy Link</button>
+      <button class="btn btn-sm btn-wa" onclick="window.open(waUrl('${esc(a.wa)}','${safeName}','${link}'),'_blank')">Kirim WA</button>
+      <button class="btn-del" title="Hapus agent" onclick="delAgent('${a.id}','${safeName}')">×</button>
+    </div>
+  </div>`;
+}
+
 async function loadAgents(){
-  const box=document.getElementById('agent-list');
+  const isAdminView=!!ADMIN_KEY;
+  const box=document.getElementById(isAdminView?'ad-agent-list':'ld-agent-list');
+  const stats=document.getElementById(isAdminView?'ad-stats':'ld-stats');
   try{
-    const r=await fetch(API+'/agents',{headers:admHeaders()});
+    const r=await fetch(API+'/agents',{headers:authHeaders()});
     const d=await r.json();
+    if(r.status===401){logout();return;}
     if(!r.ok)throw new Error(d.error||'Gagal memuat');
-    if(!d.agents.length){box.innerHTML='<div class="empty">Belum ada agent. Generate link pertama di atas! 🚀</div>';return;}
-    box.innerHTML=d.agents.map(a=>{
-      const link=DASH+'?agent='+a.id;
-      return `<div class="agent-row">
-        <div class="a-info"><div class="a-name">${esc(a.name)}</div><div class="a-wa">📱 ${esc(a.wa)} · ${(a.createdAt||'').slice(0,10)}</div></div>
-        <div class="a-prog"><div class="n ${a.p1Met>=8?'done':''}">${a.p1Met}/${a.p1Total}</div><div class="l">P1 ketemu/list</div></div>
-        <div class="a-actions">
-          <button class="btn btn-sm btn-ghost" onclick="copyLink('${link}')">Copy Link</button>
-          <button class="btn btn-sm btn-wa" onclick="window.open(waUrl('${esc(a.wa)}','${esc(a.name).replace(/'/g,"\\'")}','${link}'),'_blank')">Kirim WA</button>
-          <button class="btn-del" title="Hapus agent" onclick="delAgent('${a.id}','${esc(a.name).replace(/'/g,"\\'")}')">×</button>
-        </div>
-      </div>`;
-    }).join('');
+    stats.innerHTML=statCards(d.agents);
+    if(isAdminView)updateOrphanCard(d.agents);
+    if(!d.agents.length){box.innerHTML='<div class="empty">Belum ada agent. Generate link pertama! 🚀</div>';return;}
+    box.innerHTML=d.agents.map(a=>agentRow(a,isAdminView)).join('');
   }catch(e){box.innerHTML='<div class="empty">⚠️ '+e.message+'</div>';}
 }
 
 async function delAgent(id,name){
   if(!confirm('Hapus agent "'+name+'"? Data P1-nya ikut terhapus.'))return;
-  await fetch(API+'/agents?id='+id,{method:'DELETE',headers:admHeaders()});
+  const r=await fetch(API+'/agents?id='+id,{method:'DELETE',headers:authHeaders()});
+  if(r.status===401){logout();return;}
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){toast('⚠️ '+(d.error||'Gagal menghapus'));return;}
   toast('Agent dihapus');
   loadAgents();
 }
 
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-document.getElementById('g-wa').addEventListener('keydown',e=>{if(e.key==='Enter')generate();});
+// ── Admin: kelola leader ──
+async function loadLeaders(){
+  const box=document.getElementById('leader-list');
+  try{
+    const r=await fetch(API+'/leaders',{headers:authHeaders()});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Gagal memuat');
+    LEADERS_CACHE=d.leaders;
+    const sel=document.getElementById('orphan-target');
+    sel.innerHTML=d.leaders.map(l=>`<option value="${esc(l.id)}">${esc(l.name)} (${esc(l.id)})</option>`).join('');
+    if(!d.leaders.length){box.innerHTML='<div class="empty">Belum ada leader. Buat akun leader pertama di atas! 👆</div>';return;}
+    box.innerHTML=d.leaders.map(l=>`<div class="leader-row">
+      <div class="l-info"><div class="l-name">👔 ${esc(l.name)}</div><div class="l-id">ID: ${esc(l.id)} · sejak ${(l.createdAt||'').slice(0,10)}</div></div>
+      <div class="a-actions">
+        <button class="btn btn-sm btn-ghost" onclick="resetLeaderPass('${esc(l.id)}','${esc(l.name).replace(/'/g,"\\'")}')">Reset Password</button>
+        <button class="btn-del" title="Hapus leader" onclick="delLeader('${esc(l.id)}','${esc(l.name).replace(/'/g,"\\'")}')">×</button>
+      </div>
+    </div>`).join('');
+  }catch(e){box.innerHTML='<div class="empty">⚠️ '+e.message+'</div>';}
+}
 
-// ── Admin area (password) ──
-let ADMIN_KEY=sessionStorage.getItem('adm_key')||'';
-function admHeaders(){return ADMIN_KEY?{'X-Admin-Key':ADMIN_KEY}:{};}
-async function unlockAdmin(){
-  const pass=document.getElementById('adm-pass').value;
-  const err=document.getElementById('adm-err');
-  err.style.display='none';
-  if(!pass)return;
-  const r=await fetch(API+'/agents',{headers:{'X-Admin-Key':pass}});
-  if(r.status===401){err.textContent='⚠️ Password salah.';err.style.display='block';return;}
-  ADMIN_KEY=pass;sessionStorage.setItem('adm_key',pass);
-  document.getElementById('admin-lock').style.display='none';
-  document.getElementById('admin-area').style.display='block';
-  loadAgents();
+async function createLeader(){
+  const id=document.getElementById('nl-id').value.trim();
+  const name=document.getElementById('nl-name').value.trim();
+  const pass=document.getElementById('nl-pass').value;
+  const err=document.getElementById('nl-err'), ok=document.getElementById('nl-ok'), btn=document.getElementById('nl-btn');
+  err.style.display='none';ok.style.display='none';
+  if(!id||!name||!pass){err.textContent='ID, nama, dan password wajib diisi.';err.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Membuat...';
+  try{
+    const r=await fetch(API+'/leaders',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({id,name,password:pass})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Gagal membuat leader');
+    ok.textContent='✅ Leader "'+d.leader.name+'" dibuat — ID: '+d.leader.id+', password: '+pass+' (catat & kirim ke leadernya)';
+    ok.style.display='block';
+    document.getElementById('nl-id').value='';document.getElementById('nl-name').value='';document.getElementById('nl-pass').value='';
+    loadLeaders();
+  }catch(e){err.textContent='⚠️ '+e.message;err.style.display='block';}
+  btn.disabled=false;btn.textContent='Buat Leader';
 }
-if(ADMIN_KEY){unlockAdmin0();}
-async function unlockAdmin0(){
-  const r=await fetch(API+'/agents',{headers:admHeaders()});
-  if(r.ok){document.getElementById('admin-lock').style.display='none';document.getElementById('admin-area').style.display='block';loadAgents();}
-  else{sessionStorage.removeItem('adm_key');ADMIN_KEY='';}
+
+async function resetLeaderPass(id,name){
+  const pass=prompt('Password baru untuk leader "'+name+'" (min 6 karakter):');
+  if(pass===null)return;
+  if(pass.length<6){toast('⚠️ Password minimal 6 karakter');return;}
+  const r=await fetch(API+'/leaders?action=reset-password',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({id,password:pass})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){toast('⚠️ '+(d.error||'Gagal reset password'));return;}
+  toast('Password "'+name+'" direset ✓');
 }
+
+async function delLeader(id,name){
+  if(!confirm('Hapus leader "'+name+'"?\n\nAgent buatannya TIDAK ikut terhapus — jadi "tanpa leader" dan bisa dipindahkan ke leader lain.'))return;
+  const r=await fetch(API+'/leaders?id='+id,{method:'DELETE',headers:authHeaders()});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){toast('⚠️ '+(d.error||'Gagal menghapus'));return;}
+  toast('Leader dihapus');
+  loadLeaders();loadAgents();
+}
+
+function updateOrphanCard(agents){
+  const orphans=agents.filter(a=>!a.leaderId).length;
+  const card=document.getElementById('orphan-card');
+  if(orphans>0&&LEADERS_CACHE.length>0){
+    document.getElementById('orphan-count').textContent=orphans;
+    card.style.display='block';
+  }else{card.style.display='none';}
+}
+
+async function assignOrphans(){
+  const leaderId=document.getElementById('orphan-target').value;
+  const l=LEADERS_CACHE.find(x=>x.id===leaderId);
+  if(!leaderId)return;
+  if(!confirm('Pindahkan semua agent tanpa leader ke "'+(l?l.name:leaderId)+'"?'))return;
+  const btn=document.getElementById('orphan-btn');
+  btn.disabled=true;btn.textContent='Memindahkan...';
+  try{
+    const r=await fetch(API+'/leaders?action=assign-orphans',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({leaderId})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Gagal memindahkan');
+    toast(d.moved+' agent dipindahkan ✓');
+    loadAgents();
+  }catch(e){toast('⚠️ '+e.message);}
+  btn.disabled=false;btn.textContent='Pindahkan Semua';
+}
+
+// ── Auto-login saat halaman dibuka ──
+document.getElementById('g-wa') && document.getElementById('g-wa').addEventListener('keydown',e=>{if(e.key==='Enter')generate();});
+(async function init(){
+  if(ADMIN_KEY){
+    const r=await fetch(API+'/leaders',{headers:{'X-Admin-Key':ADMIN_KEY}});
+    if(r.ok){enterAdmin();return;}
+    sessionStorage.removeItem('adm_key');ADMIN_KEY='';
+  }
+  if(LEADER_TOKEN){
+    const r=await fetch(API+'/leaders?action=me',{headers:{'X-Leader-Token':LEADER_TOKEN}});
+    if(r.ok){const d=await r.json();LEADER=d.leader;localStorage.setItem('leader_info',JSON.stringify(LEADER));enterLeader();return;}
+    localStorage.removeItem('leader_token');localStorage.removeItem('leader_info');LEADER_TOKEN='';LEADER=null;
+  }
+  showView('login');
+})();
 </script>
 </body>
 </html>
