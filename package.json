@@ -2,6 +2,7 @@
   "name": "agents-learning-journey",
   "private": true,
   "dependencies": {
+    "@upstash/redis": "^1.38.4",
     "@vercel/blob": "^2.4.0"
   }
 }

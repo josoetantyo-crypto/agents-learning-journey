@@ -1,59 +1,31 @@
-// API Leaders — login leader + kelola akun leader (khusus admin), data di Vercel Blob privat
-import { put, get, del, list } from '@vercel/blob';
+// API Leaders — login leader + kelola akun leader (khusus admin), data di Upstash Redis
 import crypto from 'node:crypto';
-import { LEADER_PREFIX, isAdmin, hashPassword, signToken, readLeader, leaderFromReq } from './_auth.js';
+import { redis, K, parse, validId, cors, ensureMigrated } from './_db.js';
+import { isAdmin, hashPassword, signToken, readLeader, leaderFromReq } from './_auth.js';
 
-const AGENT_PREFIX = 'agents/';
-
-function cors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Key, X-Leader-Token');
-  res.setHeader('Cache-Control', 'no-store');
+async function writeLeader(r, leader, { overwrite }) {
+  const ok = await r.set(K.leader(leader.id), JSON.stringify(leader), overwrite ? undefined : { nx: true });
+  if (ok) await r.sadd(K.leaders, leader.id);
+  return !!ok;
 }
 
-async function writeLeader(leader, { overwrite }) {
-  await put(LEADER_PREFIX + leader.id + '.json', JSON.stringify(leader), {
-    access: 'private',
-    addRandomSuffix: false,
-    allowOverwrite: overwrite,
-    contentType: 'application/json',
-    cacheControlMaxAge: 0,
-  });
-}
-
-async function listLeaders() {
-  const blobs = [];
-  let cursor;
-  do {
-    const page = await list({ prefix: LEADER_PREFIX, cursor, limit: 1000 });
-    blobs.push(...page.blobs);
-    cursor = page.cursor;
-  } while (cursor);
-  const leaders = (
-    await Promise.all(
-      blobs
-        .filter((b) => b.pathname.endsWith('.json'))
-        .map(async (b) => {
-          const lid = b.pathname.slice(LEADER_PREFIX.length, -'.json'.length);
-          try {
-            const l = await readLeader(lid);
-            return l ? { id: l.id, name: l.name, createdAt: l.createdAt } : null;
-          } catch {
-            return null;
-          }
-        })
-    )
-  ).filter(Boolean);
+async function listLeaders(r) {
+  const ids = await r.smembers(K.leaders);
+  if (!ids.length) return [];
+  const leaders = (await r.mget(...ids.map(K.leader)))
+    .map((s) => parse(s))
+    .filter(Boolean)
+    .map((l) => ({ id: l.id, name: l.name, createdAt: l.createdAt }));
   leaders.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
   return leaders;
 }
 
 export default async function handler(req, res) {
-  cors(res);
+  cors(res, 'GET,POST,DELETE,OPTIONS');
   if (req.method === 'OPTIONS') return res.status(204).end();
 
   try {
+    const r = redis();
     const action = String(req.query.action || '');
 
     // ── Login leader (publik) ──
@@ -61,7 +33,19 @@ export default async function handler(req, res) {
       const { id, password } = req.body || {};
       const cleanId = String(id || '').trim().toLowerCase();
       if (!cleanId || !password) return res.status(400).json({ error: 'ID dan password wajib diisi' });
-      const leader = await readLeader(cleanId).catch(() => null);
+      let leader = await readLeader(r, cleanId);
+      if (!leader && validId(cleanId)) {
+        // Mungkin akun lama yang belum selesai dipindahkan dari database lama
+        const mig = await ensureMigrated(r);
+        if (!mig.done) {
+          return res.status(503).json({
+            error:
+              'Akun leader lama sedang dipindahkan ke database baru (aktif lagi otomatis paling lambat 5 Okt 2026). Kalau butuh sekarang, minta admin buatkan akun sementara.',
+            pending: true,
+          });
+        }
+        leader = await readLeader(r, cleanId);
+      }
       if (!leader) return res.status(401).json({ error: 'ID atau password salah' });
       const hash = hashPassword(password, leader.salt);
       const a = Buffer.from(hash);
@@ -74,7 +58,7 @@ export default async function handler(req, res) {
 
     // ── Profil sendiri dari token (untuk auto-login) ──
     if (req.method === 'GET' && action === 'me') {
-      const leader = await leaderFromReq(req);
+      const leader = await leaderFromReq(r, req);
       if (!leader) return res.status(401).json({ error: 'Sesi tidak valid, login ulang' });
       return res.status(200).json({ leader: { id: leader.id, name: leader.name } });
     }
@@ -82,58 +66,44 @@ export default async function handler(req, res) {
     // ── Semua di bawah ini khusus admin ──
     if (!isAdmin(req)) return res.status(401).json({ error: 'Password admin salah' });
 
+    // Status / jalankan migrasi dari database lama
+    if (action === 'migrate') {
+      const mig = await ensureMigrated(r, { force: req.method === 'POST' });
+      return res.status(200).json({ migration: mig, info: parse(await r.get(K.migrated)) });
+    }
+
     // Pindahkan semua agent tanpa leader ke satu leader
     if (req.method === 'POST' && action === 'assign-orphans') {
       const { leaderId } = req.body || {};
-      const cleanId = String(leaderId || '').trim().toLowerCase();
-      const target = await readLeader(cleanId).catch(() => null);
+      const target = await readLeader(r, String(leaderId || '').trim().toLowerCase());
       if (!target) return res.status(404).json({ error: 'Leader tujuan tidak ditemukan' });
 
-      const blobs = [];
-      let cursor;
-      do {
-        const page = await list({ prefix: AGENT_PREFIX, cursor, limit: 1000 });
-        blobs.push(...page.blobs);
-        cursor = page.cursor;
-      } while (cursor);
-
+      const ids = await r.smembers(K.agents);
+      const metas = ids.length ? await r.mget(...ids.map(K.agent)) : [];
+      const p = r.pipeline();
       let moved = 0;
-      for (const b of blobs) {
-        if (!b.pathname.endsWith('.json')) continue;
-        try {
-          const result = await get(b.pathname, { access: 'private' });
-          if (!result || result.statusCode !== 200 || !result.stream) continue;
-          const agent = JSON.parse(await new Response(result.stream).text());
-          if (agent.leaderId) continue;
-          agent.leaderId = target.id;
-          agent.updatedAt = new Date().toISOString();
-          await put(b.pathname, JSON.stringify(agent), {
-            access: 'private',
-            addRandomSuffix: false,
-            allowOverwrite: true,
-            contentType: 'application/json',
-            cacheControlMaxAge: 60,
-          });
-          moved++;
-        } catch {
-          /* lanjut agent berikutnya */
-        }
+      for (const s of metas) {
+        const agent = parse(s);
+        if (!agent || agent.leaderId) continue;
+        agent.leaderId = target.id;
+        p.set(K.agent(agent.id), JSON.stringify(agent));
+        moved++;
       }
+      if (moved) await p.exec();
       return res.status(200).json({ ok: true, moved });
     }
 
     // Reset password leader
     if (req.method === 'POST' && action === 'reset-password') {
       const { id, password } = req.body || {};
-      const cleanId = String(id || '').trim().toLowerCase();
       const pass = String(password || '');
       if (pass.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
-      const leader = await readLeader(cleanId).catch(() => null);
+      const leader = await readLeader(r, String(id || '').trim().toLowerCase());
       if (!leader) return res.status(404).json({ error: 'Leader tidak ditemukan' });
       leader.salt = crypto.randomBytes(16).toString('hex');
       leader.passHash = hashPassword(pass, leader.salt);
       leader.updatedAt = new Date().toISOString();
-      await writeLeader(leader, { overwrite: true });
+      await writeLeader(r, leader, { overwrite: true });
       return res.status(200).json({ ok: true });
     }
 
@@ -146,8 +116,6 @@ export default async function handler(req, res) {
       if (cleanId.length < 3) return res.status(400).json({ error: 'ID leader minimal 3 karakter (huruf/angka, tanpa spasi)' });
       if (!cleanName) return res.status(400).json({ error: 'Nama leader wajib diisi' });
       if (pass.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
-      const existing = await readLeader(cleanId).catch(() => null);
-      if (existing) return res.status(409).json({ error: 'ID leader sudah dipakai' });
 
       const salt = crypto.randomBytes(16).toString('hex');
       const leader = {
@@ -157,21 +125,26 @@ export default async function handler(req, res) {
         passHash: hashPassword(pass, salt),
         createdAt: new Date().toISOString(),
       };
-      await writeLeader(leader, { overwrite: false });
+      if (!(await writeLeader(r, leader, { overwrite: false }))) {
+        return res.status(409).json({ error: 'ID leader sudah dipakai' });
+      }
       return res.status(200).json({ leader: { id: leader.id, name: leader.name, createdAt: leader.createdAt } });
     }
 
     // List semua leader
     if (req.method === 'GET') {
-      const leaders = await listLeaders();
-      return res.status(200).json({ leaders });
+      const mig = await ensureMigrated(r);
+      return res.status(200).json({ leaders: await listLeaders(r), migrated: mig.done });
     }
 
     // Hapus leader — agent miliknya TIDAK dihapus, jadi tanpa-leader (terlihat admin)
     if (req.method === 'DELETE') {
-      const { id } = req.query;
-      if (!id) return res.status(400).json({ error: 'id wajib' });
-      await del(LEADER_PREFIX + String(id).toLowerCase() + '.json');
+      const lid = String(req.query.id || '').toLowerCase();
+      if (!validId(lid)) return res.status(400).json({ error: 'id wajib' });
+      const p = r.pipeline();
+      p.del(K.leader(lid));
+      p.srem(K.leaders, lid);
+      await p.exec();
       return res.status(200).json({ ok: true });
     }
 

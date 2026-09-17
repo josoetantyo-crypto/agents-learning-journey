@@ -87,6 +87,9 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
 .l-info{flex:1;min-width:150px}
 .l-name{font-size:13px;font-weight:700}
 .l-id{font-size:11.5px;color:var(--muted);font-family:monospace}
+.mig-banner{display:none;background:#FFFBEB;border:1.5px solid var(--amber);color:#92400E;border-radius:11px;padding:12px 15px;font-size:12.5px;line-height:1.6;margin-bottom:18px}
+.mig-banner.show{display:block}
+.mig-banner a{color:var(--red);font-weight:700;cursor:pointer}
 .view{display:none}
 .view.active{display:block}
 @media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}.a-status{min-width:80px}.a-prog{min-width:70px}}
@@ -130,6 +133,7 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
     <h1 id="ld-hello">Halo!</h1>
     <p class="lead">Buat link unik untuk agent baru &amp; pantau aktivasinya — semua data di bawah ini khusus agent yang kamu buat.</p>
 
+    <div class="mig-banner" id="ld-mig">⏳ Database sedang dipindahkan ke server baru. Agent lama kamu akan muncul lagi otomatis paling lambat <strong>5 Okt 2026</strong> — link agent lama tetap bisa dibuka &amp; progress mereka tersimpan di HP. Link baru bisa langsung di-generate.</div>
     <div class="stats" id="ld-stats"></div>
 
     <div class="card">
@@ -164,6 +168,7 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
     <h1>🛠️ Panel Admin</h1>
     <p class="lead">Kelola akun leader &amp; pantau semua agent dari seluruh leader.</p>
 
+    <div class="mig-banner" id="ad-mig">⏳ Data lama (leader &amp; agent) masih di database lama yang diblokir kuota Vercel sampai 4 Okt 2026. Setelah itu dipindahkan otomatis ke database baru. <a onclick="runMigration()">Cek sekarang</a></div>
     <div class="stats" id="ad-stats"></div>
 
     <div class="card">
@@ -370,6 +375,7 @@ async function loadAgents(){
     const d=await r.json();
     if(r.status===401){logout();return;}
     if(!r.ok)throw new Error(d.error||'Gagal memuat');
+    document.getElementById(isAdminView?'ad-mig':'ld-mig').classList.toggle('show',d.migrated===false);
     stats.innerHTML=statCards(d.agents);
     if(isAdminView)updateOrphanCard(d.agents);
     if(!d.agents.length){box.innerHTML='<div class="empty">Belum ada agent. Generate link pertama! 🚀</div>';return;}
@@ -473,17 +479,30 @@ async function assignOrphans(){
   btn.disabled=false;btn.textContent='Pindahkan Semua';
 }
 
+async function runMigration(){
+  toast('Mengecek database lama...');
+  try{
+    const r=await fetch(API+'/leaders?action=migrate',{method:'POST',headers:authHeaders()});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Gagal');
+    if(d.migration.done){toast('✓ Data lama sudah dipindahkan');loadLeaders();loadAgents();}
+    else toast('Database lama masih diblokir — dicoba lagi otomatis');
+  }catch(e){toast('⚠️ '+e.message);}
+}
+
 // ── Auto-login saat halaman dibuka ──
 document.getElementById('g-wa') && document.getElementById('g-wa').addEventListener('keydown',e=>{if(e.key==='Enter')generate();});
 (async function init(){
   if(ADMIN_KEY){
-    const r=await fetch(API+'/leaders',{headers:{'X-Admin-Key':ADMIN_KEY}});
+    const r=await fetch(API+'/leaders',{headers:{'X-Admin-Key':ADMIN_KEY}}).catch(()=>({ok:false,status:0}));
     if(r.ok){enterAdmin();return;}
+    if(r.status!==401){enterAdmin();return;}
     sessionStorage.removeItem('adm_key');ADMIN_KEY='';
   }
   if(LEADER_TOKEN){
-    const r=await fetch(API+'/leaders?action=me',{headers:{'X-Leader-Token':LEADER_TOKEN}});
+    const r=await fetch(API+'/leaders?action=me',{headers:{'X-Leader-Token':LEADER_TOKEN}}).catch(()=>({ok:false,status:0}));
     if(r.ok){const d=await r.json();LEADER=d.leader;localStorage.setItem('leader_info',JSON.stringify(LEADER));enterLeader();return;}
+    if(r.status!==401&&LEADER){enterLeader();return;} // server gangguan — jangan logout
     localStorage.removeItem('leader_token');localStorage.removeItem('leader_info');LEADER_TOKEN='';LEADER=null;
   }
   showView('login');

@@ -1,8 +1,7 @@
 // Helper auth bersama — file berawalan _ tidak di-deploy sebagai endpoint
-import { get } from '@vercel/blob';
 import crypto from 'node:crypto';
+import { K, parse, validId, isMigrated } from './_db.js';
 
-export const LEADER_PREFIX = 'leaders/';
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // sesi leader berlaku 30 hari
 
 export function secret() {
@@ -29,8 +28,11 @@ function tokenLeaderId(req) {
   const token = req.headers['x-leader-token'];
   if (!token || !secret()) return null;
   const parts = String(token).split('.');
-  if (parts.length !== 3) return null;
-  const [id, exp, sig] = parts;
+  if (parts.length < 3) return null;
+  // ID leader boleh mengandung titik — exp & sig selalu dua bagian terakhir
+  const sig = parts.pop();
+  const exp = parts.pop();
+  const id = parts.join('.');
   if (!/^\d+$/.test(exp) || Number(exp) < Date.now()) return null;
   const expect = crypto.createHmac('sha256', secret()).update(id + '.' + exp).digest('hex');
   const a = Buffer.from(sig);
@@ -39,20 +41,18 @@ function tokenLeaderId(req) {
   return id;
 }
 
-export async function readLeader(id) {
-  const result = await get(LEADER_PREFIX + id + '.json', { access: 'private' });
-  if (!result || result.statusCode !== 200 || !result.stream) return null;
-  const text = await new Response(result.stream).text();
-  return JSON.parse(text);
+export async function readLeader(r, id) {
+  if (!validId(id)) return null;
+  return parse(await r.get(K.leader(id)));
 }
 
-// Leader dari token request — null kalau token invalid/kedaluwarsa atau leader sudah dihapus
-export async function leaderFromReq(req) {
+// Leader dari token request — null kalau token invalid/kedaluwarsa atau leader sudah dihapus.
+// Selama data lama belum selesai dipindahkan, token yang sah tetap diterima supaya leader tidak ter-logout.
+export async function leaderFromReq(r, req) {
   const id = tokenLeaderId(req);
   if (!id) return null;
-  try {
-    return await readLeader(id);
-  } catch {
-    return null;
-  }
+  const leader = await readLeader(r, id);
+  if (leader) return leader;
+  if (validId(id) && !(await isMigrated(r))) return { id, name: id, pending: true };
+  return null;
 }

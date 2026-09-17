@@ -2367,7 +2367,7 @@ const SLIDES=["data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAkGBwgHBg
 
 const SLIDE_LABELS=['Cover — 3 Reasons Why People Get an Insurance','Intro — Ada 3 alasan (01 Health)','BPJS vs Prudential — tabel kosong','BPJS: Proporsional, 10 juta sisa dana','BPJS vs Prudential — perbandingan lengkap','Kesimpulan 1 — Orang hanya tau = Kesehatan','Intro — Alasan kedua: Sakit Kritis (02)','Biaya saat sakit kritis: Perawatan + Biaya Hidup','WHO: 4–5 tahun untuk sembuh atau meninggal','Berapa biaya hidup? Mr. X — 20 jt/bln','Hitungan: 20 jt × 12 × 5 thn = 1,2 M','Transisi — masih ada 1 kebutuhan lagi','Intro — Alasan ketiga: Jiwa / Life (03)','Biaya saat meninggal: Pemakaman + Biaya Hidup','Berapa biaya hidup keluarga? Mr. X — 20 jt/bln','20 jt × 12 = 240 jt/thn → butuh 4,8 M','Investasi 4,8 M (5%) → 240 jt/thn terpenuhi','Closing — Sedang concern di mana? Let me help you!'];
 
-let done=JSON.parse(localStorage.getItem('alj_done')||'{}');
+let done={};
 let agentName=localStorage.getItem('alj_name')||'';
 let p1List=JSON.parse(localStorage.getItem('alj_p1list')||'[]');
 let curSlide=0;
@@ -2378,19 +2378,44 @@ const TOTAL_MODS=12;
 const AGENT_ID=new URLSearchParams(location.search).get('agent')||'';
 const API_BASE=location.origin.indexOf('vercel.app')>-1?location.origin:'https://ignitex-agents-learning-journey.vercel.app';
 let p1SyncTimer=null;
+let restoring=true; // true sampai data server selesai dimuat — cegah data kosong menimpa database
+let lastSynced='';
+const SYNC_OK='<span style="color:var(--green)">☁️ Tersimpan ✓</span>';
 function p1Key(){return AGENT_ID?'alj_p1list_'+AGENT_ID:'alj_p1list';}
+function doneKey(){return AGENT_ID?'alj_done_'+AGENT_ID:'alj_done';}
+function stateKey(){return 'alj_state_'+AGENT_ID;}
+function dirtyKey(){return 'alj_dirty_'+AGENT_ID;}
+try{done=JSON.parse(localStorage.getItem(doneKey())||'{}');}catch(e){done={};}
 function p1SyncStatus(s){const el=document.getElementById('p1-sync');if(el)el.innerHTML=s;}
+function syncPayload(){return JSON.stringify({agentId:AGENT_ID,p1:p1List,state:buildState()});}
 function persistP1(){
   localStorage.setItem(p1Key(),JSON.stringify(p1List));
-  if(!AGENT_ID)return;
-  p1SyncStatus('☁️ Menyimpan…');
+  if(!AGENT_ID||restoring)return;
+  try{localStorage.setItem(stateKey(),JSON.stringify(buildState()));}catch(e){}
   clearTimeout(p1SyncTimer);
-  p1SyncTimer=setTimeout(function(){
-    fetch(API_BASE+'/api/p1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agentId:AGENT_ID,p1:p1List,state:buildState()})})
-      .then(function(r){if(r.status===404){agentInactive();return;}if(!r.ok)throw 0;p1SyncStatus('<span style="color:var(--green)">☁️ Tersimpan ✓</span>');})
-      .catch(function(){p1SyncStatus('<span style="color:var(--gold)">⚠️ Offline — tersimpan di HP</span>');});
-  },700);
+  p1SyncTimer=setTimeout(syncNow,1500);
 }
+// Kirim ke server hanya kalau ada perubahan sejak sync terakhir yang berhasil
+function syncNow(keepalive){
+  clearTimeout(p1SyncTimer);p1SyncTimer=null;
+  if(!AGENT_ID)return;
+  var body=syncPayload();
+  if(body===lastSynced)return;
+  p1SyncStatus('☁️ Menyimpan…');
+  fetch(API_BASE+'/api/p1',{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:!!keepalive&&body.length<60000})
+    .then(function(r){
+      if(r.status===404){agentInactive();return;}
+      if(!r.ok)throw 0;
+      lastSynced=body;
+      localStorage.removeItem(dirtyKey());
+      p1SyncStatus(SYNC_OK);
+    })
+    .catch(function(){
+      localStorage.setItem(dirtyKey(),'1');
+      p1SyncStatus('<span style="color:var(--gold)">⚠️ Tersimpan di HP — dikirim ulang otomatis</span>');
+    });
+}
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'&&p1SyncTimer)syncNow(true);});
 function agentLock(title,msg){
   document.body.innerHTML='<div style="min-height:100vh;background:#000;display:flex;align-items:center;justify-content:center;padding:24px;font-family:\'Poppins\',sans-serif">'+
     '<div style="max-width:420px;width:100%;background:#111;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:38px 28px;text-align:center">'+
@@ -2401,11 +2426,13 @@ function agentLock(title,msg){
     '</div></div>';
   window.scrollTo(0,0);
 }
+// Hanya dipanggil kalau server memastikan agent benar-benar dihapus (404) — bukan saat server gangguan
 function agentInactive(){
-  localStorage.removeItem(p1Key());
-  localStorage.removeItem('alj_name');
+  clearTimeout(p1SyncTimer);
+  [p1Key(),doneKey(),stateKey(),dirtyKey(),'alj_name'].forEach(function(k){localStorage.removeItem(k);});
   agentName='';
   p1List=[];
+  done={};
   agentLock('Link Tidak Aktif','Link agent ini sudah dihapus atau tidak aktif.<br>Hubungi leader kamu untuk mendapatkan link baru.');
 }
 function applyAgentHero(){
@@ -2413,9 +2440,23 @@ function applyAgentHero(){
   var hi=document.querySelector('.hero-input');
   if(hi)hi.innerHTML='<div style="flex:1;display:flex;align-items:center;font-size:15px;font-weight:700;color:#fff">👋 Halo, '+agentName+'!</div><button onclick="goTo(\'mod0\')">Mulai →</button>';
 }
+function applyState(s){
+  restoring=true;
+  try{if(s)restoreState(s);}finally{restoring=false;}
+}
+// Gabungkan progress HP (yang belum sempat terkirim) dengan data server — tidak ada yang hilang
+function mergeP1(server,local){
+  var byId={};
+  (server||[]).forEach(function(x){byId[x.id]=x;});
+  (local||[]).forEach(function(x){byId[x.id]=x;});
+  return Object.keys(byId).map(function(k){return byId[k];});
+}
 function initAgent(){
   if(!AGENT_ID){agentLock('Akses Khusus Agent','Halaman ini hanya bisa dibuka lewat link khusus dari leader kamu.<br>Belum punya link? Hubungi leader kamu untuk dibuatkan.');return;}
   try{p1List=JSON.parse(localStorage.getItem(p1Key())||'[]');}catch(e){}
+  var localState=null;
+  try{localState=JSON.parse(localStorage.getItem(stateKey())||'null');}catch(e){}
+  var dirty=!!localStorage.getItem(dirtyKey());
   renderP1List();
   fetch(API_BASE+'/api/agents?id='+encodeURIComponent(AGENT_ID))
     .then(function(r){
@@ -2426,13 +2467,29 @@ function initAgent(){
       if(!d)return;
       agentName=d.agent.name;
       localStorage.setItem('alj_name',agentName);
-      if(Array.isArray(d.agent.p1)){p1List=d.agent.p1;localStorage.setItem(p1Key(),JSON.stringify(p1List));}
-      if(d.agent.state)restoreState(d.agent.state);
+      var serverP1=Array.isArray(d.agent.p1)?d.agent.p1:[];
+      if(dirty){
+        p1List=mergeP1(serverP1,p1List);
+        var ss=d.agent.state||{};
+        var ls=localState||{};
+        applyState({done:Object.assign({},ss.done||{},ls.done||{}),gs:ls.gs||ss.gs});
+      }else{
+        p1List=serverP1;
+        applyState(d.agent.state);
+      }
+      localStorage.setItem(p1Key(),JSON.stringify(p1List));
+      try{localStorage.setItem(stateKey(),JSON.stringify(buildState()));}catch(e){}
       applyAgentHero();
       renderP1List();
-      p1SyncStatus('<span style="color:var(--green)">☁️ Tersimpan ✓</span>');
+      if(dirty){syncNow();}else{lastSynced=syncPayload();p1SyncStatus(SYNC_OK);}
     })
-    .catch(function(){if(agentName)applyAgentHero();});
+    .catch(function(){
+      // Server gangguan: tetap tampilkan semua progress dari HP, sync dicoba lagi saat ada perubahan
+      applyState(localState);
+      if(agentName)applyAgentHero();
+      renderP1List();
+      p1SyncStatus('<span style="color:var(--gold)">⚠️ Server sedang maintenance — progress tersimpan di HP</span>');
+    });
 }
 
 
@@ -2445,7 +2502,7 @@ function buildState(){
 }
 function restoreState(s){
   try{
-    if(s.done){done=Object.assign({},done,s.done);localStorage.setItem('alj_done',JSON.stringify(done));for(var i=0;i<TOTAL_MODS;i++){if(done[i])applyDone(i);}updateProgress();}
+    if(s.done){done=Object.assign({},done,s.done);localStorage.setItem(doneKey(),JSON.stringify(done));for(var i=0;i<TOTAL_MODS;i++){if(done[i])applyDone(i);}updateProgress();}
     var g=s.gs||{};
     if(g.goals)Object.keys(g.goals).forEach(function(k){
       if(gsGoals[k]===undefined&&gsGoalDefs[k])gsToggleGoal(k);
@@ -2482,7 +2539,7 @@ window.onload=function(){
 
 function saveName(){let n=document.getElementById('name-input').value.trim();if(!n)return;agentName=n;localStorage.setItem('alj_name',n);document.getElementById('sb-agent').textContent='👋 '+n;goTo('mod0');}
 
-function markDone(i){done[i]=true;localStorage.setItem('alj_done',JSON.stringify(done));applyDone(i);updateProgress();}
+function markDone(i){done[i]=true;localStorage.setItem(doneKey(),JSON.stringify(done));applyDone(i);updateProgress();}
 function applyDone(i){let b=document.getElementById('done'+i);if(b){b.textContent='✅ Selesai';b.classList.add('done');}let c=document.getElementById('chk'+i);if(c)c.classList.add('done');}
 
 function updateProgress(){
