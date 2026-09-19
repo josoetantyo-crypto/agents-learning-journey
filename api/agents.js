@@ -54,6 +54,18 @@ export default async function handler(req, res) {
       if (!cleanName) return res.status(400).json({ error: 'Nama agent wajib diisi' });
       if (cleanWa.length < 9) return res.status(400).json({ error: 'No WA tidak valid' });
 
+      // Isi nama & no WA link lama yang identitasnya masih terkunci di database lama.
+      // Flag `recovered` sengaja dipertahankan supaya data asli tetap menimpa ini saat database lama pulih.
+      if (String(req.query.action || '') === 'label') {
+        const aid = String(req.body.id || '');
+        if (!validId(aid)) return res.status(400).json({ error: 'id agent wajib' });
+        const agent = parse(await r.get(K.agent(aid)));
+        if (!agent) return res.status(404).json({ error: 'Agent tidak ditemukan' });
+        if (!admin && agent.leaderId !== leader.id) return res.status(403).json({ error: 'Agent ini bukan milikmu' });
+        await r.set(K.agent(aid), JSON.stringify({ ...agent, name: cleanName, wa: cleanWa }));
+        return res.status(200).json({ ok: true });
+      }
+
       const now = new Date().toISOString();
       const id = crypto.randomUUID().replace(/-/g, '').slice(0, 10);
       const agent = { id, name: cleanName, wa: cleanWa, leaderId: leader ? leader.id : null, createdAt: now };

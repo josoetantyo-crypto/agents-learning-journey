@@ -41,7 +41,7 @@ export default async function handler(req, res) {
         if (!leader && !st.done && !st.recovered) {
           return res.status(503).json({
             error:
-              'Akun leader lama sedang dipindahkan ke database baru (aktif lagi otomatis paling lambat 5 Okt 2026). Kalau butuh sekarang, minta admin buatkan akun sementara.',
+              'Akun leader sedang dipulihkan dari database lama. ID & password kamu tidak diubah — coba lagi beberapa menit lagi, atau minta admin kirimkan Link Masuk.',
             pending: true,
           });
         }
@@ -50,7 +50,8 @@ export default async function handler(req, res) {
       if (!leader.salt || !leader.passHash) {
         // Akun hasil pemulihan: ID-nya kembali, tapi password lama masih terkunci di database lama
         return res.status(409).json({
-          error: 'Akun ini sedang dipulihkan — password lama belum bisa dibaca. Minta admin set ulang passwordmu.',
+          error:
+            'Password lama kamu masih terkunci di database lama yang sedang diblokir Vercel. ID & password kamu tidak diubah — akan berlaku lagi otomatis begitu pulih. Untuk masuk sekarang, minta admin kirimkan Link Masuk.',
           needsReset: true,
         });
       }
@@ -85,6 +86,17 @@ export default async function handler(req, res) {
         info: parse(await r.get(K.migrated)),
         recoveryInfo: parse(await r.get(K.recovered)),
       });
+    }
+
+    // Link masuk sekali-klik untuk satu leader (khusus admin — lihat gerbang isAdmin di atas).
+    // Dipakai selama password lama masih terkunci di database lama yang diblokir Vercel.
+    // Password leader TIDAK disentuh: begitu database lama terbaca lagi, ID + password lama
+    // mereka berlaku persis seperti semula.
+    if (req.method === 'POST' && action === 'login-link') {
+      const lid = String((req.body || {}).id || '').trim().toLowerCase();
+      const leader = await readLeader(r, lid);
+      if (!leader) return res.status(404).json({ error: 'Leader tidak ditemukan' });
+      return res.status(200).json({ token: signToken(leader.id), leader: { id: leader.id, name: leader.name } });
     }
 
     // Pindahkan satu agent ke leader tertentu (dipakai saat merapikan agent hasil pemulihan)

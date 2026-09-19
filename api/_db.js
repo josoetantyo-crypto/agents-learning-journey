@@ -61,7 +61,7 @@ export function cors(res, methods) {
 }
 
 export const PENDING_MSG =
-  'Database sedang dipindahkan ke server baru. Data lama akan kembali otomatis paling lambat 5 Okt 2026 — progress tetap tersimpan di HP.';
+  'Database sedang dipulihkan. Progress kamu aman tersimpan di HP dan akan tersambung lagi otomatis — coba buka lagi beberapa menit lagi.';
 
 // ── Migrasi sekali jalan dari Vercel Blob ──
 let migratedMemo = false;
@@ -72,10 +72,36 @@ export async function isMigrated(r) {
   return migratedMemo;
 }
 
-async function readBlobJson(pathname) {
+async function readBlobText(pathname) {
   const result = await get(pathname, { access: 'private' });
   if (!result || result.statusCode !== 200 || !result.stream) return null;
-  return JSON.parse(await new Response(result.stream).text());
+  return await new Response(result.stream).text();
+}
+
+async function readBlobJson(pathname) {
+  const text = await readBlobText(pathname);
+  return text === null ? null : JSON.parse(text);
+}
+
+// Apakah isi Blob sudah bisa dibaca lagi?
+// Harus diprobe dengan file yang BENAR-BENAR ADA: path karangan menjawab 404 dan dulu salah
+// dikira "store diblokir", sehingga migrasi tidak pernah jalan walau blokirnya sudah dibuka.
+// Store yang diblokir menjawab 403 "Your store is blocked" untuk file apa pun, padahal list() tetap jalan.
+async function probeBlobReadable() {
+  let page;
+  try {
+    page = await list({ limit: 1 });
+  } catch (e) {
+    return { ok: false, reason: e.message };
+  }
+  if (!page.blobs.length) return { ok: false, reason: 'Daftar Blob kosong' };
+  try {
+    const text = await readBlobText(page.blobs[0].pathname);
+    if (text === null) return { ok: false, reason: 'Blob tidak terbaca' };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: e.message };
+  }
 }
 
 async function listAll(prefix) {
@@ -114,12 +140,10 @@ export async function ensureMigrated(r, { force = false } = {}) {
   if (!process.env.BLOB_READ_WRITE_TOKEN) return { done: false, error: 'Blob tidak terhubung' };
   if (!force && (await r.get(K.blobRetryAfter))) return { done: false, blocked: true };
 
-  // Probe: store Blob yang disuspend melempar 403 (dan list() diam-diam kosong), jadi cek dulu sebelum percaya hasil list
-  try {
-    await readBlobJson('leaders/__probe__.json');
-  } catch (e) {
-    await r.set(K.blobRetryAfter, '1', { ex: 1800 });
-    return { done: false, blocked: true, error: e.message };
+  const probe = await probeBlobReadable();
+  if (!probe.ok) {
+    await r.set(K.blobRetryAfter, '1', { ex: 900 });
+    return { done: false, blocked: true, error: probe.reason };
   }
 
   if (!(await r.set(K.migrating, '1', { nx: true, ex: 240 }))) return { done: false, busy: true };

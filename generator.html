@@ -135,7 +135,7 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
     <h1 id="ld-hello">Halo!</h1>
     <p class="lead">Buat link unik untuk agent baru &amp; pantau aktivasinya — semua data di bawah ini khusus agent yang kamu buat.</p>
 
-    <div class="mig-banner" id="ld-mig">⏳ Database sedang dipindahkan ke server baru. Agent lama kamu akan muncul lagi otomatis paling lambat <strong>5 Okt 2026</strong> — link agent lama tetap bisa dibuka &amp; progress mereka tersimpan di HP. Link baru bisa langsung di-generate.</div>
+    <div class="mig-banner" id="ld-mig">⏳ Database lama sedang dipulihkan. <strong>Semua link agent lama sudah aktif kembali</strong> — nama &amp; no WA-nya menyusul otomatis (atau muncul sendiri begitu agent-nya buka link). Link baru bisa langsung di-generate seperti biasa.</div>
     <div class="stats" id="ld-stats"></div>
 
     <div class="card">
@@ -170,7 +170,7 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
     <h1>🛠️ Panel Admin</h1>
     <p class="lead">Kelola akun leader &amp; pantau semua agent dari seluruh leader.</p>
 
-    <div class="mig-banner" id="ad-mig">⏳ Data lama (leader &amp; agent) masih di database lama yang diblokir kuota Vercel sampai 4 Okt 2026. Setelah itu dipindahkan otomatis ke database baru. <a onclick="runMigration()">Cek sekarang</a></div>
+    <div class="mig-banner" id="ad-mig">⏳ Blob store di akun Vercel sedang <strong>diblokir</strong>, jadi nama, no WA, pasangan agent↔leader, dan password leader lama belum bisa dibaca. Semua link agent sudah dihidupkan kembali dan password leader <strong>tidak diubah</strong> — pakai <strong>Link Masuk</strong> untuk leader sementara ini. Begitu blokirnya dibuka di <a href="https://vercel.com/ignitex-s-projects/~/stores" target="_blank" rel="noopener">dashboard Vercel</a>, semuanya pulih otomatis. <a onclick="runMigration()">Cek sekarang</a></div>
     <div class="stats" id="ad-stats"></div>
 
     <div class="card">
@@ -363,7 +363,8 @@ function agentRow(a, isAdminView){
     <div class="a-prog"><div class="n ${nClass}">${p1Text}</div><div class="l">P1 ketemu/list</div></div>
     <div class="a-actions">
       <button class="btn btn-sm btn-ghost" onclick="copyLink('${link}')">Copy Link</button>
-      ${a.wa?`<button class="btn btn-sm btn-wa" onclick="window.open(waUrl('${esc(a.wa)}','${safeName}','${link}'),'_blank')">Kirim WA</button>`:''}
+      ${a.wa?`<button class="btn btn-sm btn-wa" onclick="window.open(waUrl('${esc(a.wa)}','${safeName}','${link}'),'_blank')">Kirim WA</button>`
+           :`<button class="btn btn-sm btn-ghost" onclick="labelAgent('${a.id}')">Isi Nama &amp; WA</button>`}
       <button class="btn-del" title="Hapus agent" onclick="delAgent('${a.id}','${safeName||a.id}')">×</button>
     </div>
   </div>`;
@@ -410,6 +411,7 @@ async function loadLeaders(){
     box.innerHTML=d.leaders.map(l=>`<div class="leader-row">
       <div class="l-info"><div class="l-name">👔 ${esc(l.name)}${l.needsReset?' <span class="badge off">perlu reset password</span>':''}</div><div class="l-id">ID: ${esc(l.id)} · sejak ${(l.createdAt||'').slice(0,10)}</div></div>
       <div class="a-actions">
+        <button class="btn btn-sm btn-ghost" onclick="leaderLoginLink('${esc(l.id)}','${esc(l.name).replace(/'/g,"\\'")}')">Link Masuk</button>
         <button class="btn btn-sm btn-ghost" onclick="resetLeaderPass('${esc(l.id)}','${esc(l.name).replace(/'/g,"\\'")}')">Reset Password</button>
         <button class="btn-del" title="Hapus leader" onclick="delLeader('${esc(l.id)}','${esc(l.name).replace(/'/g,"\\'")}')">×</button>
       </div>
@@ -435,6 +437,22 @@ async function createLeader(){
     loadLeaders();
   }catch(e){err.textContent='⚠️ '+e.message;err.style.display='block';}
   btn.disabled=false;btn.textContent='Buat Leader';
+}
+
+// Link masuk sekali-klik — dipakai selama password lama masih terkunci di database lama.
+// Password leader sama sekali tidak diubah; ID + password lamanya berlaku lagi begitu database pulih.
+async function leaderLoginLink(id,name){
+  const r=await fetch(API+'/leaders?action=login-link',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({id})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){toast('⚠️ '+(d.error||'Gagal membuat link'));return;}
+  const url=location.origin+location.pathname+'#t='+encodeURIComponent(d.token);
+  copyLink(url);
+  const wa=prompt('Link masuk untuk "'+name+'" (berlaku 30 hari) sudah tersalin.\n\nKetik no WA-nya untuk langsung kirim, atau Cancel kalau mau tempel sendiri:','');
+  if(wa){
+    const num=wa.replace(/[^0-9]/g,'').replace(/^0/,'62');
+    const msg='Halo '+name+'! 👋\n\nDatabase lama lagi dipulihkan, jadi sementara masuk lewat link ini ya (ID & password kamu tidak berubah, nanti bisa dipakai lagi seperti biasa):\n\n'+url;
+    window.open('https://wa.me/'+num+'?text='+encodeURIComponent(msg),'_blank');
+  }
 }
 
 async function resetLeaderPass(id,name){
@@ -463,6 +481,20 @@ function updateOrphanCard(agents){
     document.getElementById('orphan-count').textContent=orphans;
     card.style.display='block';
   }else{card.style.display='none';}
+}
+
+// Isi nama & no WA link lama yang identitasnya masih terkunci di database lama.
+// Data asli tetap akan menimpa isian ini begitu database lama pulih.
+async function labelAgent(id){
+  const name=prompt('Nama agent untuk link '+id+':','');
+  if(!name)return;
+  const wa=prompt('No WA '+name+' (08... atau 62...):','');
+  if(!wa)return;
+  const r=await fetch(API+'/agents?action=label',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({id,name,wa})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){toast('⚠️ '+(d.error||'Gagal menyimpan'));return;}
+  toast('Tersimpan ✓');
+  loadAgents();
 }
 
 // Pindahkan satu agent ke leader tertentu — dipakai merapikan agent hasil pemulihan
@@ -510,6 +542,17 @@ async function runMigration(){
 // ── Auto-login saat halaman dibuka ──
 document.getElementById('g-wa') && document.getElementById('g-wa').addEventListener('keydown',e=>{if(e.key==='Enter')generate();});
 (async function init(){
+  // Link masuk dari admin: #t=<token> → langsung jadi sesi leader, tanpa menyentuh passwordnya
+  const hashTok=(location.hash.match(/[#&]t=([^&]+)/)||[])[1];
+  if(hashTok){
+    LEADER_TOKEN=decodeURIComponent(hashTok);
+    localStorage.setItem('leader_token',LEADER_TOKEN);
+    history.replaceState(null,'',location.pathname+location.search);
+    const r=await fetch(API+'/leaders?action=me',{headers:{'X-Leader-Token':LEADER_TOKEN}}).catch(()=>({ok:false}));
+    if(r.ok){const d=await r.json();LEADER=d.leader;localStorage.setItem('leader_info',JSON.stringify(LEADER));enterLeader();return;}
+    localStorage.removeItem('leader_token');LEADER_TOKEN='';
+    toast('⚠️ Link masuk sudah kedaluwarsa — minta admin buatkan yang baru');
+  }
   if(ADMIN_KEY){
     const r=await fetch(API+'/leaders',{headers:{'X-Admin-Key':ADMIN_KEY}}).catch(()=>({ok:false,status:0}));
     if(r.ok){enterAdmin();return;}
