@@ -2426,14 +2426,14 @@ function agentLock(title,msg){
     '</div></div>';
   window.scrollTo(0,0);
 }
-// Hanya dipanggil kalau server memastikan agent benar-benar dihapus (404) — bukan saat server gangguan
+// Dipanggil kalau server memastikan agent tidak ada (404) — bukan saat server gangguan.
+// Progress di HP SENGAJA TIDAK DIHAPUS: kalau 404-nya ternyata salah (database sedang dipulihkan,
+// link dihapus lalu dikembalikan), semua yang sudah diisi agent masih utuh dan tersambung lagi
+// sendiri begitu linknya hidup. Halaman hanya dikunci, tidak ada data yang dibuang.
 function agentInactive(){
   clearTimeout(p1SyncTimer);
-  [p1Key(),doneKey(),stateKey(),dirtyKey(),'alj_name'].forEach(function(k){localStorage.removeItem(k);});
-  agentName='';
-  p1List=[];
-  done={};
-  agentLock('Link Tidak Aktif','Link agent ini sudah dihapus atau tidak aktif.<br>Hubungi leader kamu untuk mendapatkan link baru.');
+  localStorage.setItem(dirtyKey(),'1'); // tandai belum tersinkron, biar dikirim ulang saat link hidup lagi
+  agentLock('Link Tidak Aktif','Link agent ini sudah dihapus atau tidak aktif.<br>Hubungi leader kamu untuk mendapatkan link baru.<br><br><span style="font-size:11.5px;opacity:.8">Progress kamu tetap tersimpan di HP ini dan akan muncul lagi begitu linknya diaktifkan.</span>');
 }
 function applyAgentHero(){
   document.getElementById('sb-agent').textContent='👋 '+agentName;
