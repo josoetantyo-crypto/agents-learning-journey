@@ -60,6 +60,10 @@ export function cors(res, methods) {
   res.setHeader('Cache-Control', 'no-store');
 }
 
+// Hobby: begitu kuota Blob terlampaui, aksesnya diblokir sampai 30 hari berlalu.
+// Store ini diblokir 4 Sep 2026 → terbuka sendiri sekitar 4 Okt 2026 (atau langsung, kalau upgrade/trial Pro).
+export const BLOB_RETRY_SECONDS = 6 * 60 * 60;
+
 export const PENDING_MSG =
   'Database sedang dipulihkan. Progress kamu aman tersimpan di HP dan akan tersambung lagi otomatis — coba buka lagi beberapa menit lagi.';
 
@@ -142,7 +146,9 @@ export async function ensureMigrated(r, { force = false } = {}) {
 
   const probe = await probeBlobReadable();
   if (!probe.ok) {
-    await r.set(K.blobRetryAfter, '1', { ex: 900 });
+    // Cooldown 6 jam: list()/get() dihitung sebagai Advanced/Simple Operation dan jatah Hobby
+    // sangat kecil (2.000 advanced/bulan) — retry terlalu sering malah bisa memperpanjang blokir.
+    await r.set(K.blobRetryAfter, '1', { ex: BLOB_RETRY_SECONDS });
     return { done: false, blocked: true, error: probe.reason };
   }
 
@@ -162,8 +168,16 @@ export async function ensureMigrated(r, { force = false } = {}) {
       if (!l || !l.id || !validId(l.id)) return;
       const cur = parse(await r.get(K.leader(l.id)));
       const p = r.pipeline();
-      // Akun asli (termasuk password lama) menimpa placeholder; akun yang dibuat ulang admin tidak diganggu
-      if (!cur || cur.recovered) p.set(K.leader(l.id), JSON.stringify(l));
+      // Akun asli (nama + password lama) menimpa placeholder; akun yang dibuat ulang admin tidak diganggu.
+      // Kalau admin sempat memulihkan passwordnya selama masa blokir (pwKeep), password itu yang dipertahankan
+      // supaya leader tidak tiba-tiba tertendang — sisanya (nama, createdAt) tetap ikut data asli.
+      if (!cur) p.set(K.leader(l.id), JSON.stringify(l));
+      else if (cur.recovered) {
+        p.set(
+          K.leader(l.id),
+          JSON.stringify(cur.pwKeep ? { ...l, salt: cur.salt, passHash: cur.passHash } : l)
+        );
+      }
       p.sadd(K.leaders, l.id);
       await p.exec();
       leaders++;
@@ -238,7 +252,7 @@ export async function recoverFromListing(r, { force = false } = {}) {
     const agentBlobs = await listAll('agents/');
     const leaderBlobs = await listAll('leaders/');
     if (!agentBlobs.length && !leaderBlobs.length) {
-      await r.set(K.recoverRetryAfter, '1', { ex: 900 });
+      await r.set(K.recoverRetryAfter, '1', { ex: BLOB_RETRY_SECONDS });
       return { done: false, blocked: true, error: 'Daftar Blob kosong' };
     }
 

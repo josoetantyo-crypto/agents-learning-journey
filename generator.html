@@ -135,7 +135,7 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
     <h1 id="ld-hello">Halo!</h1>
     <p class="lead">Buat link unik untuk agent baru &amp; pantau aktivasinya — semua data di bawah ini khusus agent yang kamu buat.</p>
 
-    <div class="mig-banner" id="ld-mig">⏳ Database lama sedang dipulihkan. <strong>Semua link agent lama sudah aktif kembali</strong> — nama &amp; no WA-nya menyusul otomatis (atau muncul sendiri begitu agent-nya buka link). Link baru bisa langsung di-generate seperti biasa.</div>
+    <div class="mig-banner" id="ld-mig">⏳ Database lama sedang dipulihkan (selesai otomatis sekitar 4 Okt). <strong>Semua link agent lama sudah aktif kembali</strong> — nama &amp; no WA-nya menyusul sendiri, atau muncul begitu agent-nya buka link. Link baru bisa langsung di-generate seperti biasa.</div>
     <div class="stats" id="ld-stats"></div>
 
     <div class="card">
@@ -170,7 +170,7 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
     <h1>🛠️ Panel Admin</h1>
     <p class="lead">Kelola akun leader &amp; pantau semua agent dari seluruh leader.</p>
 
-    <div class="mig-banner" id="ad-mig">⏳ Blob store di akun Vercel sedang <strong>diblokir</strong>, jadi nama, no WA, pasangan agent↔leader, dan password leader lama belum bisa dibaca. Semua link agent sudah dihidupkan kembali dan password leader <strong>tidak diubah</strong> — pakai <strong>Link Masuk</strong> untuk leader sementara ini. Begitu blokirnya dibuka di <a href="https://vercel.com/ignitex-s-projects/~/stores" target="_blank" rel="noopener">dashboard Vercel</a>, semuanya pulih otomatis. <a onclick="runMigration()">Cek sekarang</a></div>
+    <div class="mig-banner" id="ad-mig">⏳ Kuota Blob Vercel (paket Hobby) terlampaui pada 4 Sep, jadi database lama terkunci dan akan <strong>terbuka sendiri sekitar 4 Okt 2026</strong> — atau langsung, kalau mulai <a href="https://vercel.com/ignitex-s-projects/~/settings/billing" target="_blank" rel="noopener">trial Pro</a>. Semua link agent sudah aktif kembali. Untuk leader: klik <strong>Pulihkan Akun</strong> lalu ketik password yang dulu kamu berikan — dari sisi mereka tidak ada yang berubah. <a onclick="runMigration()">Cek sekarang</a></div>
     <div class="stats" id="ad-stats"></div>
 
     <div class="card">
@@ -409,10 +409,10 @@ async function loadLeaders(){
     sel.innerHTML=d.leaders.map(l=>`<option value="${esc(l.id)}">${esc(l.name)} (${esc(l.id)})</option>`).join('');
     if(!d.leaders.length){box.innerHTML='<div class="empty">Belum ada leader. Buat akun leader pertama di atas! 👆</div>';return;}
     box.innerHTML=d.leaders.map(l=>`<div class="leader-row">
-      <div class="l-info"><div class="l-name">👔 ${esc(l.name)}${l.needsReset?' <span class="badge off">perlu reset password</span>':''}</div><div class="l-id">ID: ${esc(l.id)} · sejak ${(l.createdAt||'').slice(0,10)}</div></div>
+      <div class="l-info"><div class="l-name">👔 ${esc(l.name)}${l.needsReset?' <span class="badge off">belum bisa login</span>':''}</div><div class="l-id">ID: ${esc(l.id)} · sejak ${(l.createdAt||'').slice(0,10)}</div></div>
       <div class="a-actions">
+        <button class="btn btn-sm${l.needsReset?'':' btn-ghost'}" onclick="resetLeaderPass('${esc(l.id)}','${esc(l.name).replace(/'/g,"\\'")}',${l.needsReset?'true':'false'})">${l.needsReset?'Pulihkan Akun':'Reset Password'}</button>
         <button class="btn btn-sm btn-ghost" onclick="leaderLoginLink('${esc(l.id)}','${esc(l.name).replace(/'/g,"\\'")}')">Link Masuk</button>
-        <button class="btn btn-sm btn-ghost" onclick="resetLeaderPass('${esc(l.id)}','${esc(l.name).replace(/'/g,"\\'")}')">Reset Password</button>
         <button class="btn-del" title="Hapus leader" onclick="delLeader('${esc(l.id)}','${esc(l.name).replace(/'/g,"\\'")}')">×</button>
       </div>
     </div>`).join('');
@@ -455,14 +455,22 @@ async function leaderLoginLink(id,name){
   }
 }
 
-async function resetLeaderPass(id,name){
-  const pass=prompt('Password baru untuk leader "'+name+'" (min 6 karakter):');
+async function resetLeaderPass(id,name,recovering){
+  let newName='';
+  if(recovering){
+    newName=prompt('Pulihkan akun "'+id+'"\n\nNama tampilan leader ini:',name===id?'':name);
+    if(newName===null)return;
+  }
+  const pass=prompt(recovering
+    ? 'Password untuk "'+(newName||id)+'".\n\nKetik PASSWORD YANG DULU kamu berikan ke dia — dengan begitu dia login persis seperti biasa, tidak ada yang berubah.\n\n(Kalau lupa, isi password baru lalu kirimkan ke dia.)'
+    : 'Password baru untuk leader "'+name+'" (min 6 karakter):');
   if(pass===null)return;
   if(pass.length<6){toast('⚠️ Password minimal 6 karakter');return;}
-  const r=await fetch(API+'/leaders?action=reset-password',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({id,password:pass})});
+  const r=await fetch(API+'/leaders?action=reset-password',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({id,password:pass,name:newName})});
   const d=await r.json().catch(()=>({}));
-  if(!r.ok){toast('⚠️ '+(d.error||'Gagal reset password'));return;}
-  toast('Password "'+name+'" direset ✓');
+  if(!r.ok){toast('⚠️ '+(d.error||'Gagal menyimpan password'));return;}
+  toast(recovering?'Akun "'+(newName||id)+'" aktif ✓ — sudah bisa login':'Password "'+name+'" direset ✓');
+  loadLeaders();
 }
 
 async function delLeader(id,name){

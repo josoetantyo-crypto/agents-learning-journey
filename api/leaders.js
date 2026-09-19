@@ -51,7 +51,7 @@ export default async function handler(req, res) {
         // Akun hasil pemulihan: ID-nya kembali, tapi password lama masih terkunci di database lama
         return res.status(409).json({
           error:
-            'Password lama kamu masih terkunci di database lama yang sedang diblokir Vercel. ID & password kamu tidak diubah — akan berlaku lagi otomatis begitu pulih. Untuk masuk sekarang, minta admin kirimkan Link Masuk.',
+            'Akun kamu sedang dipulihkan — database lama terkunci sampai sekitar 4 Okt. ID kamu tidak berubah. Minta Jeremy klik "Pulihkan Akun" di panel admin, lalu login seperti biasa.',
           needsReset: true,
         });
       }
@@ -137,9 +137,10 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, moved });
     }
 
-    // Reset password leader
+    // Set password leader. Selama database lama diblokir ini dipakai untuk MEMULIHKAN akun:
+    // admin mengetik ulang password yang dulu ia berikan, jadi dari sisi leader tidak ada yang berubah.
     if (req.method === 'POST' && action === 'reset-password') {
-      const { id, password } = req.body || {};
+      const { id, password, name } = req.body || {};
       const pass = String(password || '');
       if (pass.length < 6) return res.status(400).json({ error: 'Password minimal 6 karakter' });
       const leader = await readLeader(r, String(id || '').trim().toLowerCase());
@@ -147,10 +148,13 @@ export default async function handler(req, res) {
       leader.salt = crypto.randomBytes(16).toString('hex');
       leader.passHash = hashPassword(pass, leader.salt);
       leader.updatedAt = new Date().toISOString();
-      // Password baru ini yang berlaku — jangan ditimpa lagi oleh password lama saat migrasi jalan
-      delete leader.recovered;
+      const cleanName = String(name || '').trim().slice(0, 60);
+      if (cleanName) leader.name = cleanName;
+      // Password ini yang berlaku seterusnya — saat database lama pulih, nama & tanggal asli tetap
+      // dikembalikan tapi passwordnya tidak ditimpa lagi (lihat pwKeep di ensureMigrated).
+      if (leader.recovered) leader.pwKeep = true;
       await writeLeader(r, leader, { overwrite: true });
-      return res.status(200).json({ ok: true });
+      return res.status(200).json({ ok: true, leader: { id: leader.id, name: leader.name } });
     }
 
     // Buat leader baru
