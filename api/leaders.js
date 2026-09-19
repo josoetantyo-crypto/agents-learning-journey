@@ -61,7 +61,10 @@ export default async function handler(req, res) {
       if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
         return res.status(401).json({ error: 'ID atau password salah' });
       }
-      return res.status(200).json({ token: signToken(leader.id), leader: { id: leader.id, name: leader.name } });
+      return res.status(200).json({
+        token: signToken(leader.id),
+        leader: { id: leader.id, name: leader.name, mustChange: !!leader.mustChange },
+      });
     }
 
     // ── Leader ganti passwordnya sendiri (butuh sesi login + password lama) ──
@@ -85,8 +88,9 @@ export default async function handler(req, res) {
       leader.salt = crypto.randomBytes(16).toString('hex');
       leader.passHash = hashPassword(baru, leader.salt);
       leader.updatedAt = new Date().toISOString();
-      // Password pilihan leader sendiri — jangan ditimpa lagi saat database lama pulih
+      // Password pilihan leader sendiri — berlaku selamanya, tidak ditimpa saat database lama pulih
       if (leader.recovered) leader.pwKeep = true;
+      delete leader.mustChange; // bukan password sementara lagi
       await writeLeader(r, leader, { overwrite: true });
       return res.status(200).json({ ok: true, token: signToken(leader.id) });
     }
@@ -95,7 +99,9 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && action === 'me') {
       const leader = await leaderFromReq(r, req);
       if (!leader) return res.status(401).json({ error: 'Sesi tidak valid, login ulang' });
-      return res.status(200).json({ leader: { id: leader.id, name: leader.name } });
+      return res.status(200).json({
+        leader: { id: leader.id, name: leader.name, mustChange: !!leader.mustChange },
+      });
     }
 
     // ── Semua di bawah ini khusus admin ──
@@ -179,7 +185,11 @@ export default async function handler(req, res) {
       if (cleanName) leader.name = cleanName;
       // Password ini yang berlaku seterusnya — saat database lama pulih, nama & tanggal asli tetap
       // dikembalikan tapi passwordnya tidak ditimpa lagi (lihat pwKeep di ensureMigrated).
-      if (leader.recovered) leader.pwKeep = true;
+      if (leader.recovered) {
+        leader.pwKeep = true;
+        // Password ini diketik admin, bukan pilihan leader — minta dia menggantinya saat pertama masuk
+        leader.mustChange = true;
+      }
       await writeLeader(r, leader, { overwrite: true });
       return res.status(200).json({ ok: true, leader: { id: leader.id, name: leader.name } });
     }

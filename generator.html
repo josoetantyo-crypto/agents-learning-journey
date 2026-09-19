@@ -138,8 +138,8 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
     <div class="mig-banner" id="ld-mig">⏳ Database lama sedang dipulihkan (selesai otomatis sekitar 4 Okt). <strong>Semua link agent lama sudah aktif kembali</strong> — nama &amp; no WA-nya menyusul sendiri, atau muncul begitu agent-nya buka link. Link baru bisa langsung di-generate seperti biasa.</div>
 
     <div class="card" id="pw-card">
-      <h2>🔑 Password Kamu</h2>
-      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Ganti kapan saja jadi password yang kamu hafal. Yang kamu pilih di sini permanen — tidak akan tertimpa oleh pemulihan database.</p>
+      <h2 id="pw-title">🔑 Password Kamu</h2>
+      <p id="pw-desc" style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Ganti kapan saja jadi password yang kamu hafal. Yang kamu pilih di sini permanen — tidak akan tertimpa oleh pemulihan database.</p>
       <div class="frow">
         <input type="password" id="pw-cur" placeholder="Password sekarang..." maxlength="60" autocomplete="current-password">
         <input type="password" id="pw-new" placeholder="Password baru (min 6)..." maxlength="60" autocomplete="new-password">
@@ -325,7 +325,9 @@ async function changeMyPassword(){
     if(!r.ok)throw new Error(d.error||'Gagal mengganti password');
     if(d.token){LEADER_TOKEN=d.token;localStorage.setItem('leader_token',LEADER_TOKEN);}
     ['pw-cur','pw-new','pw-new2'].forEach(function(k){document.getElementById(k).value='';});
-    ok.textContent='✅ Password berhasil diganti. Pakai password baru ini lain kali kamu login.';
+    if(LEADER){LEADER.mustChange=false;localStorage.setItem('leader_info',JSON.stringify(LEADER));}
+    applyPwPrompt();
+    ok.textContent='✅ Password berhasil diganti. Mulai sekarang pakai password ini — berlaku selamanya.';
     ok.style.display='block';
     toast('Password diganti ✓');
   }catch(e){gagal(e.message);}
@@ -352,7 +354,26 @@ async function loginAdmin(){
 function enterLeader(){
   document.getElementById('ld-hello').textContent='Halo, '+LEADER.name+'!';
   showView('leader');
+  applyPwPrompt();
   loadAgents();
+}
+
+// Kalau yang dipakai masih password sementara dari admin, kartu ganti password
+// ditonjolkan di paling atas sampai leader memilih passwordnya sendiri.
+function applyPwPrompt(){
+  const card=document.getElementById('pw-card');
+  const wajib=!!(LEADER&&LEADER.mustChange);
+  card.style.border=wajib?'2px solid var(--amber)':'';
+  card.style.background=wajib?'#fffbea':'';
+  document.getElementById('pw-title').textContent=wajib?'🔑 Ganti Password Sementara Kamu':'🔑 Password Kamu';
+  document.getElementById('pw-desc').innerHTML=wajib
+    ? 'Password yang kamu pakai barusan masih <strong>password sementara</strong> dari admin. Ganti sekarang jadi password yang kamu hafal — yang kamu pilih di sini <strong>berlaku selamanya</strong> dan tidak akan diubah lagi oleh siapa pun.'
+    : 'Ganti kapan saja jadi password yang kamu hafal. Yang kamu pilih di sini permanen — tidak akan tertimpa oleh pemulihan database.';
+  if(wajib){
+    card.scrollIntoView({block:'start'});
+    const f=document.getElementById('pw-cur');
+    if(f)f.focus();
+  }
 }
 async function enterAdmin(){
   showView('admin');
