@@ -151,6 +151,16 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
     </div>
     <div class="stats" id="ld-stats"></div>
 
+    <div class="card" id="claim-card">
+      <h2>🔎 Agent Lama Kamu Belum Muncul?</h2>
+      <p style="font-size:12.5px;color:var(--muted);line-height:1.6;margin-bottom:12px">Semua link agent lama <strong>masih hidup</strong> — tapi catatan "agent ini milik siapa" ikut terkunci di database lama, jadi daftarmu sementara kosong. Buka riwayat WhatsApp kamu, salin link-link agent yang dulu kamu kirim, lalu tempel di sini (boleh banyak sekaligus, satu per baris). Progress mereka utuh.</p>
+      <textarea id="claim-input" placeholder="https://ignitex-agents-learning-journey.vercel.app/?agent=xxxxxxxxxx&#10;https://ignitex-agents-learning-journey.vercel.app/?agent=yyyyyyyyyy" style="width:100%;min-height:96px;font-family:ui-monospace,Menlo,monospace;font-size:12px;padding:10px;border:1px solid var(--line);border-radius:8px"></textarea>
+      <div class="frow" style="margin-top:8px">
+        <button class="btn" id="claim-btn" onclick="claimAgents()">Tarik Kembali Agent Saya</button>
+      </div>
+      <div id="claim-result" style="margin-top:10px"></div>
+    </div>
+
     <div class="card">
       <h2>➕ Generate Link Agent Baru</h2>
       <div class="frow">
@@ -304,6 +314,35 @@ async function loginLeader(){
     enterLeader();
   }catch(e){err.textContent='⚠️ '+e.message;err.style.display='block';}
   btn.disabled=false;btn.textContent='Masuk';
+}
+
+// Leader menarik kembali link agent lamanya dengan menempel link dari riwayat WhatsApp-nya.
+// Hanya agent yang belum bertuan yang bisa ditarik, jadi tidak bisa mengambil punya leader lain.
+async function claimAgents(){
+  const baris=document.getElementById('claim-input').value.split(/[\s,]+/).map(function(x){return x.trim();}).filter(Boolean);
+  const box=document.getElementById('claim-result');
+  if(!baris.length){box.innerHTML='<div class="err" style="display:block">⚠️ Tempel dulu link agent-nya.</div>';return;}
+  const btn=document.getElementById('claim-btn');
+  btn.disabled=true;
+  const hasil=[];
+  for(let i=0;i<baris.length;i++){
+    btn.textContent='Memproses... ('+(i+1)+'/'+baris.length+')';
+    try{
+      const r=await fetch(API+'/agents?action=claim',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({id:baris[i]})});
+      const d=await r.json();
+      hasil.push(r.ok?{v:baris[i],ok:true,already:d.already,nama:(d.agent&&d.agent.name)||''}:{v:baris[i],err:d.error||'gagal'});
+    }catch(e){hasil.push({v:baris[i],err:e.message});}
+  }
+  btn.disabled=false;btn.textContent='Tarik Kembali Agent Saya';
+  const ok=hasil.filter(function(x){return x.ok;});
+  const gagal=hasil.filter(function(x){return x.err;});
+  let html='<div class="ok-msg" style="display:block">✅ '+ok.length+' agent kembali ke daftar kamu'+(ok.filter(function(x){return x.already;}).length?' (beberapa memang sudah milikmu)':'')+'</div>';
+  if(gagal.length){
+    html+='<div class="err" style="display:block;margin-top:8px">⚠️ '+gagal.length+' tidak bisa ditarik:<br>'+
+      gagal.map(function(x){return '<span style="font-family:ui-monospace,Menlo,monospace;font-size:11px">'+esc(x.v.slice(-24))+'</span> — '+esc(x.err);}).join('<br>')+'</div>';
+  }
+  box.innerHTML=html;
+  if(ok.length){document.getElementById('claim-input').value='';loadAgents();}
 }
 
 // Leader mengganti passwordnya sendiri — butuh password lamanya, jadi tetap aman
