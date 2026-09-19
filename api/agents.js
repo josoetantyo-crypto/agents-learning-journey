@@ -47,26 +47,6 @@ export default async function handler(req, res) {
       const leader = admin ? null : await leaderFromReq(r, req);
       if (!admin && !leader) return res.status(401).json({ error: 'Login leader dulu untuk membuat link agent' });
 
-      // Leader menarik kembali link agent lamanya. Selama database lama terkunci, catatan
-      // "agent ini milik siapa" ikut terkunci, jadi semua link lama tampil tanpa leader.
-      // Buktinya kepemilikan = leader memegang linknya (ada di riwayat WA-nya sendiri).
-      // Hanya agent yang belum bertuan yang bisa diklaim, jadi tidak bisa merebut punya orang lain.
-      if (String(req.query.action || '') === 'claim') {
-        if (!leader) return res.status(403).json({ error: 'Klaim hanya lewat akun leader' });
-        // Terima ID polos maupun link lengkap yang ditempel dari WhatsApp
-        const raw = String(req.body.id || '').trim();
-        const m = raw.match(/[?&]agent=([a-z0-9._-]+)/i);
-        const aid = (m ? m[1] : raw).toLowerCase();
-        if (!validId(aid)) return res.status(400).json({ error: 'Link atau ID tidak dikenali' });
-        const agent = parse(await r.get(K.agent(aid)));
-        if (!agent) return res.status(404).json({ error: 'Link ini tidak ada di database' });
-        if (agent.leaderId === leader.id) return res.status(200).json({ ok: true, already: true, agent });
-        if (agent.leaderId) return res.status(409).json({ error: 'Link ini sudah terdaftar di leader lain' });
-        agent.leaderId = leader.id;
-        await r.set(K.agent(aid), JSON.stringify(agent));
-        return res.status(200).json({ ok: true, agent });
-      }
-
       const { name, wa } = req.body || {};
       const cleanName = String(name || '').trim().slice(0, 60);
       let cleanWa = String(wa || '').replace(/[^0-9]/g, '');
