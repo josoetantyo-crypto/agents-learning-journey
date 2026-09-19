@@ -183,6 +183,12 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
       </div>
       <div class="err" id="nl-err"></div>
       <div class="ok-msg" id="nl-ok"></div>
+      <div id="recover-all" style="display:none;margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:10px;background:#fffbea">
+        <div style="font-size:13px;font-weight:800;margin-bottom:6px">⚡ <span id="ra-count">0</span> akun leader belum bisa login</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">Password lama mereka masih terkunci di database lama sampai blokir Vercel lepas (~4 Okt). Klik sekali untuk mengaktifkan semuanya dengan password sementara, lalu salin daftarnya dan kirim ke masing-masing leader. ID mereka tidak berubah.</div>
+        <button class="btn" id="ra-btn" onclick="recoverAllLeaders()">Aktifkan Semua Sekarang</button>
+        <div id="ra-result" style="margin-top:12px"></div>
+      </div>
       <div id="leader-list" style="margin-top:14px"><div class="empty">Memuat...</div></div>
       <div class="note">Leader login di halaman ini pakai ID + password di atas. Hapus leader tidak menghapus agent-nya — agent jadi "tanpa leader" dan tetap terlihat di sini.</div>
     </div>
@@ -418,6 +424,9 @@ async function loadLeaders(){
     const d=await r.json();
     if(!r.ok)throw new Error(d.error||'Gagal memuat');
     LEADERS_CACHE=d.leaders;
+    const need=d.leaders.filter(l=>l.needsReset);
+    document.getElementById('ra-count').textContent=need.length;
+    document.getElementById('recover-all').style.display=need.length?'block':'none';
     const sel=document.getElementById('orphan-target');
     sel.innerHTML=d.leaders.map(l=>`<option value="${esc(l.id)}">${esc(l.name)} (${esc(l.id)})</option>`).join('');
     if(!d.leaders.length){box.innerHTML='<div class="empty">Belum ada leader. Buat akun leader pertama di atas! 👆</div>';return;}
@@ -450,6 +459,71 @@ async function createLeader(){
     loadLeaders();
   }catch(e){err.textContent='⚠️ '+e.message;err.style.display='block';}
   btn.disabled=false;btn.textContent='Buat Leader';
+}
+
+// Nama tampilan sementara untuk akun hasil pemulihan — otomatis diganti nama asli
+// begitu database lama terbaca lagi.
+const NAMA_LEADER={alfredbudiman:'Alfred Budiman',andhikaimmanuel:'Andhika Immanuel',andreasengelen:'Andreas Engelen',
+  danielwilliam:'Daniel William',gabriellagertruida:'Gabriella Gertruida',ivandemas:'Ivan Demas',
+  jennifercarissa:'Jennifer Carissa',jeremysoetantyo:'Jeremy Soetantyo',jeshuaebenhaezer:'Jeshua Ebenhaezer',
+  jonathankristanto:'Jonathan Kristanto',josepnata:'Josep Nata',kevinsam:'Kevin Sam',yosuatheo:'Yosua Theo'};
+
+// Password sementara yang gampang diketik & dibaca di WhatsApp: tanpa huruf/angka yang mirip (0 O 1 l i)
+function passwordSementara(){
+  const ab='abcdefghjkmnpqrstuvwxyz23456789';
+  const buf=new Uint32Array(5);
+  crypto.getRandomValues(buf);
+  return 'ignitex'+Array.from(buf,n=>ab[n%ab.length]).join('');
+}
+
+// Aktifkan sekaligus semua akun leader yang passwordnya masih terkunci di database lama
+async function recoverAllLeaders(){
+  const need=LEADERS_CACHE.filter(l=>l.needsReset);
+  if(!need.length){toast('Semua akun sudah bisa login');return;}
+  if(!confirm('Aktifkan '+need.length+' akun leader dengan password sementara?\n\nID mereka tidak berubah. Setelah ini kamu dapat daftarnya untuk dikirim ke masing-masing leader.'))return;
+  const btn=document.getElementById('ra-btn');
+  btn.disabled=true;
+  const hasil=[];
+  for(let i=0;i<need.length;i++){
+    const l=need[i];
+    btn.textContent='Mengaktifkan... ('+(i+1)+'/'+need.length+')';
+    const pwd=passwordSementara();
+    const nama=NAMA_LEADER[l.id]||l.name;
+    try{
+      const r=await fetch(API+'/leaders?action=reset-password',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({id:l.id,password:pwd,name:nama})});
+      if(r.ok)hasil.push({id:l.id,nama:nama,pwd:pwd});
+      else hasil.push({id:l.id,nama:nama,err:((await r.json().catch(()=>({}))).error)||'gagal'});
+    }catch(e){hasil.push({id:l.id,nama:nama,err:e.message});}
+  }
+  btn.disabled=false;btn.textContent='Aktifkan Semua Sekarang';
+  const ok=hasil.filter(x=>x.pwd);
+  const gagal=hasil.filter(x=>x.err);
+  const teks=ok.map(x=>
+    x.nama+'\nBuka: '+location.origin+location.pathname+'\nID: '+x.id+'\nPassword: '+x.pwd
+  ).join('\n\n');
+  const box=document.getElementById('ra-result');
+  box.innerHTML='';
+  const judul=document.createElement('div');
+  judul.style.cssText='font-size:12.5px;font-weight:800;margin-bottom:8px';
+  judul.textContent='✅ '+ok.length+' akun aktif — salin & kirim ke masing-masing leader';
+  const ta=document.createElement('textarea');
+  ta.readOnly=true;
+  ta.style.cssText='width:100%;min-height:170px;font-family:ui-monospace,Menlo,monospace;font-size:12px;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff';
+  ta.value=teks;
+  const salin=document.createElement('button');
+  salin.className='btn btn-sm';
+  salin.style.marginTop='8px';
+  salin.textContent='Salin Semua';
+  salin.onclick=function(){copyLink(ta.value);};
+  box.appendChild(judul);box.appendChild(ta);box.appendChild(salin);
+  if(gagal.length){
+    const e=document.createElement('div');
+    e.className='err';e.style.cssText='display:block;margin-top:8px';
+    e.textContent='⚠️ '+gagal.length+' akun gagal: '+gagal.map(x=>x.id).join(', ');
+    box.appendChild(e);
+  }
+  toast(ok.length+' akun leader aktif ✓');
+  loadLeaders();
 }
 
 // Link masuk sekali-klik — dipakai selama password lama masih terkunci di database lama.
