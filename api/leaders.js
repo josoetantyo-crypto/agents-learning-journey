@@ -1,6 +1,6 @@
 // API Leaders — login leader + kelola akun leader (khusus admin), data di Upstash Redis
 import crypto from 'node:crypto';
-import { redis, K, parse, validId, cors, ensureMigrated } from './_db.js';
+import { redis, K, parse, validId, cors, ensureMigrated, ensureRestored, recoverFromListing } from './_db.js';
 import { isAdmin, hashPassword, signToken, readLeader, leaderFromReq } from './_auth.js';
 
 async function writeLeader(r, leader, { overwrite }) {
@@ -15,7 +15,7 @@ async function listLeaders(r) {
   const leaders = (await r.mget(...ids.map(K.leader)))
     .map((s) => parse(s))
     .filter(Boolean)
-    .map((l) => ({ id: l.id, name: l.name, createdAt: l.createdAt }));
+    .map((l) => ({ id: l.id, name: l.name, createdAt: l.createdAt, needsReset: !l.salt || !l.passHash }));
   leaders.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
   return leaders;
 }
@@ -36,17 +36,24 @@ export default async function handler(req, res) {
       let leader = await readLeader(r, cleanId);
       if (!leader && validId(cleanId)) {
         // Mungkin akun lama yang belum selesai dipindahkan dari database lama
-        const mig = await ensureMigrated(r);
-        if (!mig.done) {
+        const st = await ensureRestored(r);
+        leader = await readLeader(r, cleanId);
+        if (!leader && !st.done && !st.recovered) {
           return res.status(503).json({
             error:
               'Akun leader lama sedang dipindahkan ke database baru (aktif lagi otomatis paling lambat 5 Okt 2026). Kalau butuh sekarang, minta admin buatkan akun sementara.',
             pending: true,
           });
         }
-        leader = await readLeader(r, cleanId);
       }
       if (!leader) return res.status(401).json({ error: 'ID atau password salah' });
+      if (!leader.salt || !leader.passHash) {
+        // Akun hasil pemulihan: ID-nya kembali, tapi password lama masih terkunci di database lama
+        return res.status(409).json({
+          error: 'Akun ini sedang dipulihkan — password lama belum bisa dibaca. Minta admin set ulang passwordmu.',
+          needsReset: true,
+        });
+      }
       const hash = hashPassword(password, leader.salt);
       const a = Buffer.from(hash);
       const b = Buffer.from(leader.passHash);
@@ -68,8 +75,33 @@ export default async function handler(req, res) {
 
     // Status / jalankan migrasi dari database lama
     if (action === 'migrate') {
-      const mig = await ensureMigrated(r, { force: req.method === 'POST' });
-      return res.status(200).json({ migration: mig, info: parse(await r.get(K.migrated)) });
+      const force = req.method === 'POST';
+      const mig = await ensureMigrated(r, { force });
+      // Blob masih disuspend — minimal hidupkan lagi semua link lama dari daftar nama file
+      const rec = mig.done ? { done: true, already: true } : await recoverFromListing(r, { force });
+      return res.status(200).json({
+        migration: mig,
+        recovery: rec,
+        info: parse(await r.get(K.migrated)),
+        recoveryInfo: parse(await r.get(K.recovered)),
+      });
+    }
+
+    // Pindahkan satu agent ke leader tertentu (dipakai saat merapikan agent hasil pemulihan)
+    if (req.method === 'POST' && action === 'assign') {
+      const { agentId, leaderId } = req.body || {};
+      const aid = String(agentId || '');
+      if (!validId(aid)) return res.status(400).json({ error: 'agentId wajib' });
+      const agent = parse(await r.get(K.agent(aid)));
+      if (!agent) return res.status(404).json({ error: 'Agent tidak ditemukan' });
+      const lid = String(leaderId || '').trim().toLowerCase();
+      if (lid) {
+        const target = await readLeader(r, lid);
+        if (!target) return res.status(404).json({ error: 'Leader tujuan tidak ditemukan' });
+      }
+      agent.leaderId = lid || null;
+      await r.set(K.agent(aid), JSON.stringify(agent));
+      return res.status(200).json({ ok: true, leaderId: agent.leaderId });
     }
 
     // Pindahkan semua agent tanpa leader ke satu leader
@@ -103,6 +135,8 @@ export default async function handler(req, res) {
       leader.salt = crypto.randomBytes(16).toString('hex');
       leader.passHash = hashPassword(pass, leader.salt);
       leader.updatedAt = new Date().toISOString();
+      // Password baru ini yang berlaku — jangan ditimpa lagi oleh password lama saat migrasi jalan
+      delete leader.recovered;
       await writeLeader(r, leader, { overwrite: true });
       return res.status(200).json({ ok: true });
     }
@@ -133,8 +167,8 @@ export default async function handler(req, res) {
 
     // List semua leader
     if (req.method === 'GET') {
-      const mig = await ensureMigrated(r);
-      return res.status(200).json({ leaders: await listLeaders(r), migrated: mig.done });
+      const mig = await ensureRestored(r);
+      return res.status(200).json({ leaders: await listLeaders(r), migrated: !!mig.done });
     }
 
     // Hapus leader — agent miliknya TIDAK dihapus, jadi tanpa-leader (terlihat admin)

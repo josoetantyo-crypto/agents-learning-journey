@@ -2387,7 +2387,7 @@ function stateKey(){return 'alj_state_'+AGENT_ID;}
 function dirtyKey(){return 'alj_dirty_'+AGENT_ID;}
 try{done=JSON.parse(localStorage.getItem(doneKey())||'{}');}catch(e){done={};}
 function p1SyncStatus(s){const el=document.getElementById('p1-sync');if(el)el.innerHTML=s;}
-function syncPayload(){return JSON.stringify({agentId:AGENT_ID,p1:p1List,state:buildState()});}
+function syncPayload(){return JSON.stringify({agentId:AGENT_ID,name:agentName,p1:p1List,state:buildState()});}
 function persistP1(){
   localStorage.setItem(p1Key(),JSON.stringify(p1List));
   if(!AGENT_ID||restoring)return;
@@ -2465,8 +2465,10 @@ function initAgent(){
     })
     .then(function(d){
       if(!d)return;
-      agentName=d.agent.name;
-      localStorage.setItem('alj_name',agentName);
+      // Link hasil pemulihan belum punya nama di server — pakai nama yang tersimpan di HP,
+      // dan kalau belum ada, biarkan halaman minta agent mengetik namanya lagi
+      agentName=d.agent.name||agentName||'';
+      if(agentName)localStorage.setItem('alj_name',agentName);
       var serverP1=Array.isArray(d.agent.p1)?d.agent.p1:[];
       if(dirty){
         p1List=mergeP1(serverP1,p1List);
@@ -2479,9 +2481,10 @@ function initAgent(){
       }
       localStorage.setItem(p1Key(),JSON.stringify(p1List));
       try{localStorage.setItem(stateKey(),JSON.stringify(buildState()));}catch(e){}
-      applyAgentHero();
+      if(agentName)applyAgentHero();
       renderP1List();
-      if(dirty){syncNow();}else{lastSynced=syncPayload();p1SyncStatus(SYNC_OK);}
+      // Nama belum tercatat di server (link hasil pemulihan) — kirim begitu ada
+      if(dirty||(agentName&&!d.agent.name)){syncNow();}else{lastSynced=syncPayload();p1SyncStatus(SYNC_OK);}
     })
     .catch(function(){
       // Server gangguan: tetap tampilkan semua progress dari HP, sync dicoba lagi saat ada perubahan
@@ -2537,7 +2540,7 @@ window.onload=function(){
   initAgent();
 };
 
-function saveName(){let n=document.getElementById('name-input').value.trim();if(!n)return;agentName=n;localStorage.setItem('alj_name',n);document.getElementById('sb-agent').textContent='👋 '+n;goTo('mod0');}
+function saveName(){let n=document.getElementById('name-input').value.trim();if(!n)return;agentName=n;localStorage.setItem('alj_name',n);document.getElementById('sb-agent').textContent='👋 '+n;if(AGENT_ID)syncNow();goTo('mod0');}
 
 function markDone(i){done[i]=true;localStorage.setItem(doneKey(),JSON.stringify(done));applyDone(i);updateProgress();}
 function applyDone(i){let b=document.getElementById('done'+i);if(b){b.textContent='✅ Selesai';b.classList.add('done');}let c=document.getElementById('chk'+i);if(c)c.classList.add('done');}

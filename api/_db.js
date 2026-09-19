@@ -1,5 +1,7 @@
 // Database utama: Upstash Redis (free tier, via Vercel Marketplace).
 // Data lama di Vercel Blob (agents-journey-db) dipindahkan otomatis sekali jalan — lihat ensureMigrated().
+// Selama store Blob disuspend, isi file tidak bisa dibaca (403) tapi daftar nama file masih bisa —
+// dari daftar itu semua link agent lama dihidupkan kembali sebagai placeholder — lihat recoverFromListing().
 // File berawalan _ tidak di-deploy sebagai endpoint.
 import { Redis } from '@upstash/redis';
 import { get, list } from '@vercel/blob';
@@ -27,6 +29,9 @@ export const K = {
   migrated: 'ig:migrated',
   migrating: 'ig:migrating',
   blobRetryAfter: 'ig:blob-retry-after',
+  recovered: 'ig:recovered', // JSON {at,agents,leaders} — hasil recoverFromListing
+  recovering: 'ig:recovering',
+  recoverRetryAfter: 'ig:recover-retry-after',
 };
 
 export const parse = (s) => {
@@ -93,14 +98,23 @@ async function mapLimit(items, limit, fn) {
   );
 }
 
-// Kembalikan { done, blocked?, error? }. Aman dipanggil berkali-kali: tidak pernah menimpa data yang sudah ada di Redis
-// dan tidak pernah menghapus Blob (tetap jadi backup).
+// Gabung dua name list P1 berdasarkan id — entri yang sudah ada di Redis (progress terbaru dari HP) menang
+function mergeP1(older, newer) {
+  const byId = new Map();
+  for (const x of Array.isArray(older) ? older : []) byId.set(String(x && x.id), x);
+  for (const x of Array.isArray(newer) ? newer : []) byId.set(String(x && x.id), x);
+  return [...byId.values()].filter(Boolean);
+}
+
+// Kembalikan { done, blocked?, error? }. Aman dipanggil berkali-kali: tidak pernah menghapus progress yang
+// sudah masuk Redis dan tidak pernah menghapus Blob (tetap jadi backup). Record placeholder hasil
+// recoverFromListing() ditimpa data asli begitu Blob bisa dibaca lagi.
 export async function ensureMigrated(r, { force = false } = {}) {
   if (await isMigrated(r)) return { done: true };
   if (!process.env.BLOB_READ_WRITE_TOKEN) return { done: false, error: 'Blob tidak terhubung' };
   if (!force && (await r.get(K.blobRetryAfter))) return { done: false, blocked: true };
 
-  // Probe: store Blob yang diblokir melempar 403 (dan list() diam-diam kosong), jadi cek dulu sebelum percaya hasil list
+  // Probe: store Blob yang disuspend melempar 403 (dan list() diam-diam kosong), jadi cek dulu sebelum percaya hasil list
   try {
     await readBlobJson('leaders/__probe__.json');
   } catch (e) {
@@ -113,7 +127,7 @@ export async function ensureMigrated(r, { force = false } = {}) {
     const leaderBlobs = (await listAll('leaders/')).filter((b) => b.pathname.endsWith('.json'));
     const agentBlobs = await listAll('agents/');
     if (!leaderBlobs.length && !agentBlobs.length) {
-      // Store berisi 111 file saat diblokir — kosong berarti belum benar-benar terbaca, jangan tandai selesai
+      // Store berisi 111 file saat disuspend — kosong berarti belum benar-benar terbaca, jangan tandai selesai
       await r.set(K.blobRetryAfter, '1', { ex: 1800 });
       return { done: false, blocked: true, error: 'Blob kosong' };
     }
@@ -122,8 +136,10 @@ export async function ensureMigrated(r, { force = false } = {}) {
     await mapLimit(leaderBlobs, 8, async (b) => {
       const l = await readBlobJson(b.pathname);
       if (!l || !l.id || !validId(l.id)) return;
+      const cur = parse(await r.get(K.leader(l.id)));
       const p = r.pipeline();
-      p.set(K.leader(l.id), JSON.stringify(l), { nx: true });
+      // Akun asli (termasuk password lama) menimpa placeholder; akun yang dibuat ulang admin tidak diganggu
+      if (!cur || cur.recovered) p.set(K.leader(l.id), JSON.stringify(l));
       p.sadd(K.leaders, l.id);
       await p.exec();
       leaders++;
@@ -142,18 +158,30 @@ export async function ensureMigrated(r, { force = false } = {}) {
       async (b) => {
         const a = await readBlobJson(b.pathname);
         if (!a || !a.id || !validId(a.id)) return;
-        const p1 = Array.isArray(a.p1) ? a.p1 : [];
+        const [curMetaS, curDataS] = await r.mget(K.agent(a.id), K.agentData(a.id));
+        const curMeta = parse(curMetaS);
+        const cur = parse(curDataS) || {};
         const p = r.pipeline();
+        if (!curMeta || curMeta.recovered) {
+          p.set(
+            K.agent(a.id),
+            JSON.stringify({ id: a.id, name: a.name, wa: a.wa, leaderId: a.leaderId || null, createdAt: a.createdAt })
+          );
+        }
+        // Name list lama + progress yang sudah tersimpan di Redis digabung, tidak ada yang hilang
+        const p1 = mergeP1(a.p1, cur.p1);
         p.set(
-          K.agent(a.id),
-          JSON.stringify({ id: a.id, name: a.name, wa: a.wa, leaderId: a.leaderId || null, createdAt: a.createdAt }),
-          { nx: true }
+          K.agentData(a.id),
+          JSON.stringify({
+            p1,
+            state: cur.state || a.state || null,
+            updatedAt: cur.updatedAt || a.updatedAt || null,
+          })
         );
-        p.set(K.agentData(a.id), JSON.stringify({ p1, state: a.state || null, updatedAt: a.updatedAt || null }), {
-          nx: true,
-        });
         p.sadd(K.agents, a.id);
-        p.hsetnx(K.p1stats, a.id, JSON.stringify({ t: p1.length, m: p1.filter((x) => x.met).length, u: a.updatedAt }));
+        p.hset(K.p1stats, {
+          [a.id]: JSON.stringify({ t: p1.length, m: p1.filter((x) => x.met).length, u: cur.updatedAt || a.updatedAt }),
+        });
         const act = a.activatedAt || markers[a.id];
         if (act) p.hsetnx(K.activated, a.id, act);
         await p.exec();
@@ -167,4 +195,87 @@ export async function ensureMigrated(r, { force = false } = {}) {
   } finally {
     await r.del(K.migrating);
   }
+}
+
+// ── Pemulihan darurat: hidupkan kembali link lama tanpa membaca isi Blob ──
+// Store yang disuspend menolak download (403) tapi masih mengizinkan list(), dan nama file = ID agent.
+// Dari situ semua link lama dibuat ulang sebagai record placeholder ({recovered:true}) supaya tidak
+// lagi muncul "Link Tidak Aktif": agent buka link -> progress di HP-nya tersambung lagi dan ikut tersimpan.
+// Nama, no WA, dan leader-nya menyusul otomatis begitu Blob aktif lagi (ensureMigrated menimpa placeholder).
+export async function recoverFromListing(r, { force = false } = {}) {
+  if (await isMigrated(r)) return { done: true, already: true };
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return { done: false, error: 'Blob tidak terhubung' };
+  const info = parse(await r.get(K.recovered));
+  if (info && !force) return { done: true, already: true, ...info };
+  if (!force && (await r.get(K.recoverRetryAfter))) return { done: false, blocked: true };
+  if (!(await r.set(K.recovering, '1', { nx: true, ex: 120 }))) return { done: false, busy: true };
+
+  try {
+    const agentBlobs = await listAll('agents/');
+    const leaderBlobs = await listAll('leaders/');
+    if (!agentBlobs.length && !leaderBlobs.length) {
+      await r.set(K.recoverRetryAfter, '1', { ex: 900 });
+      return { done: false, blocked: true, error: 'Daftar Blob kosong' };
+    }
+
+    const created = {}; // id -> ISO createdAt (dari file .json)
+    const markers = {}; // id -> ISO activatedAt (dari file .activated)
+    for (const b of agentBlobs) {
+      const rest = b.pathname.slice('agents/'.length);
+      const at = new Date(b.uploadedAt).toISOString();
+      if (rest.endsWith('.json')) created[rest.slice(0, -'.json'.length)] = at;
+      else if (rest.endsWith('.activated')) markers[rest.slice(0, -'.activated'.length)] = at;
+    }
+
+    let agents = 0;
+    await mapLimit(Object.keys(created).filter(validId), 8, async (id) => {
+      const p = r.pipeline();
+      p.set(
+        K.agent(id),
+        JSON.stringify({ id, name: '', wa: '', leaderId: null, createdAt: created[id], recovered: true }),
+        { nx: true } // nx: agent yang sudah punya data asli tidak boleh dikosongkan
+      );
+      p.set(K.agentData(id), JSON.stringify({ p1: [], state: null, updatedAt: null }), { nx: true });
+      p.sadd(K.agents, id);
+      p.hsetnx(K.p1stats, id, JSON.stringify({ t: 0, m: 0, u: created[id] }));
+      if (markers[id]) p.hsetnx(K.activated, id, markers[id]);
+      await p.exec();
+      agents++;
+    });
+
+    let leaders = 0;
+    await mapLimit(
+      leaderBlobs.filter((b) => b.pathname.endsWith('.json')),
+      8,
+      async (b) => {
+        const id = b.pathname.slice('leaders/'.length, -'.json'.length);
+        if (!validId(id)) return;
+        const p = r.pipeline();
+        // Tanpa salt/passHash: login ditolak sampai admin set ulang password (lihat api/leaders.js)
+        p.set(
+          K.leader(id),
+          JSON.stringify({ id, name: id, createdAt: new Date(b.uploadedAt).toISOString(), recovered: true }),
+          { nx: true }
+        );
+        p.sadd(K.leaders, id);
+        await p.exec();
+        leaders++;
+      }
+    );
+
+    const result = { at: new Date().toISOString(), agents, leaders };
+    await r.set(K.recovered, JSON.stringify(result));
+    return { done: true, ...result };
+  } finally {
+    await r.del(K.recovering);
+  }
+}
+
+// Dipakai endpoint yang perlu memastikan agent/leader lama ada sebelum menyerah 404:
+// coba migrasi penuh dulu, kalau Blob masih disuspend jatuh ke pemulihan dari daftar file.
+export async function ensureRestored(r) {
+  const mig = await ensureMigrated(r);
+  if (mig.done) return mig;
+  const rec = await recoverFromListing(r);
+  return { ...mig, recovered: rec.done, recoverError: rec.error };
 }

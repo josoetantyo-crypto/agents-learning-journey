@@ -52,6 +52,8 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
 .a-wa{font-size:11.5px;color:var(--muted)}
 .a-leader{font-size:10.5px;color:#fff;background:var(--muted);border-radius:5px;padding:1px 7px;display:inline-block;margin-top:3px}
 .a-leader.orphan{background:var(--amber)}
+.a-name.recov{color:var(--muted);font-style:italic;font-weight:600}
+.a-assign{font-size:11px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:#fff;margin-top:4px;max-width:150px}
 .a-status{text-align:center;min-width:96px}
 .badge{display:inline-block;font-size:10.5px;font-weight:700;border-radius:6px;padding:3px 9px}
 .badge.off{background:#f1f5f9;color:var(--muted)}
@@ -294,9 +296,10 @@ function enterLeader(){
   showView('leader');
   loadAgents();
 }
-function enterAdmin(){
+async function enterAdmin(){
   showView('admin');
-  loadLeaders();
+  // Daftar leader dimuat dulu supaya dropdown "pindahkan ke leader" di tiap baris agent terisi
+  await loadLeaders();
   loadAgents();
 }
 
@@ -339,29 +342,29 @@ function statCards(agents){
 
 function agentRow(a, isAdminView){
   const link=DASH+'?agent='+a.id;
-  const safeName=esc(a.name).replace(/'/g,"\\'");
+  // Link hasil pemulihan: link-nya hidup, tapi nama & no WA-nya masih terkunci di database lama
+  const recov=a.recovered&&!a.name;
+  const shownName=a.name||('Link lama · '+a.id);
+  const safeName=esc(a.name||'').replace(/'/g,"\\'");
   const status=a.activatedAt
     ? `<span class="badge on">🟢 Aktif</span><div class="l">${(a.activatedAt||'').slice(0,10)}</div>`
     : `<span class="badge off">⚪ Belum buka</span>`;
   let leaderTag='';
   if(isAdminView){
-    if(a.leaderId){
-      const l=LEADERS_CACHE.find(x=>x.id===a.leaderId);
-      leaderTag=`<div class="a-leader">👔 ${esc(l?l.name:a.leaderId)}</div>`;
-    }else{
-      leaderTag=`<div class="a-leader orphan">tanpa leader</div>`;
-    }
+    const opts=LEADERS_CACHE.map(l=>`<option value="${esc(l.id)}"${l.id===a.leaderId?' selected':''}>${esc(l.name)}</option>`).join('');
+    leaderTag=`<select class="a-assign" title="Pindahkan ke leader" onchange="assignAgent('${a.id}',this.value)">`+
+      `<option value=""${a.leaderId?'':' selected'}>— tanpa leader —</option>${opts}</select>`;
   }
   const nClass=a.p1Met>=8?'done':(a.p1Total===0?'zero':'');
   const p1Text=a.p1Total===0?'–':`${a.p1Met}/${a.p1Total}`;
   return `<div class="agent-row">
-    <div class="a-info"><div class="a-name">${esc(a.name)}</div><div class="a-wa">📱 ${esc(a.wa)} · ${(a.createdAt||'').slice(0,10)}</div>${leaderTag}</div>
+    <div class="a-info"><div class="a-name${recov?' recov':''}">${esc(shownName)}</div><div class="a-wa">${recov?'⚠️ nama &amp; no WA menyusul — link tetap aktif':'📱 '+esc(a.wa)} · ${(a.createdAt||'').slice(0,10)}</div>${leaderTag}</div>
     <div class="a-status">${status}</div>
     <div class="a-prog"><div class="n ${nClass}">${p1Text}</div><div class="l">P1 ketemu/list</div></div>
     <div class="a-actions">
       <button class="btn btn-sm btn-ghost" onclick="copyLink('${link}')">Copy Link</button>
-      <button class="btn btn-sm btn-wa" onclick="window.open(waUrl('${esc(a.wa)}','${safeName}','${link}'),'_blank')">Kirim WA</button>
-      <button class="btn-del" title="Hapus agent" onclick="delAgent('${a.id}','${safeName}')">×</button>
+      ${a.wa?`<button class="btn btn-sm btn-wa" onclick="window.open(waUrl('${esc(a.wa)}','${safeName}','${link}'),'_blank')">Kirim WA</button>`:''}
+      <button class="btn-del" title="Hapus agent" onclick="delAgent('${a.id}','${safeName||a.id}')">×</button>
     </div>
   </div>`;
 }
@@ -405,7 +408,7 @@ async function loadLeaders(){
     sel.innerHTML=d.leaders.map(l=>`<option value="${esc(l.id)}">${esc(l.name)} (${esc(l.id)})</option>`).join('');
     if(!d.leaders.length){box.innerHTML='<div class="empty">Belum ada leader. Buat akun leader pertama di atas! 👆</div>';return;}
     box.innerHTML=d.leaders.map(l=>`<div class="leader-row">
-      <div class="l-info"><div class="l-name">👔 ${esc(l.name)}</div><div class="l-id">ID: ${esc(l.id)} · sejak ${(l.createdAt||'').slice(0,10)}</div></div>
+      <div class="l-info"><div class="l-name">👔 ${esc(l.name)}${l.needsReset?' <span class="badge off">perlu reset password</span>':''}</div><div class="l-id">ID: ${esc(l.id)} · sejak ${(l.createdAt||'').slice(0,10)}</div></div>
       <div class="a-actions">
         <button class="btn btn-sm btn-ghost" onclick="resetLeaderPass('${esc(l.id)}','${esc(l.name).replace(/'/g,"\\'")}')">Reset Password</button>
         <button class="btn-del" title="Hapus leader" onclick="delLeader('${esc(l.id)}','${esc(l.name).replace(/'/g,"\\'")}')">×</button>
@@ -462,6 +465,15 @@ function updateOrphanCard(agents){
   }else{card.style.display='none';}
 }
 
+// Pindahkan satu agent ke leader tertentu — dipakai merapikan agent hasil pemulihan
+async function assignAgent(agentId,leaderId){
+  const r=await fetch(API+'/leaders?action=assign',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({agentId,leaderId})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){toast('⚠️ '+(d.error||'Gagal memindahkan'));loadAgents();return;}
+  toast(leaderId?'Agent dipindahkan ✓':'Agent dilepas dari leader ✓');
+  loadAgents();
+}
+
 async function assignOrphans(){
   const leaderId=document.getElementById('orphan-target').value;
   const l=LEADERS_CACHE.find(x=>x.id===leaderId);
@@ -486,6 +498,11 @@ async function runMigration(){
     const d=await r.json();
     if(!r.ok)throw new Error(d.error||'Gagal');
     if(d.migration.done){toast('✓ Data lama sudah dipindahkan');loadLeaders();loadAgents();}
+    else if(d.recovery&&d.recovery.done){
+      const i=d.recoveryInfo||d.recovery;
+      toast('Database lama masih disuspend — '+(i.agents||0)+' link agent & '+(i.leaders||0)+' akun leader dihidupkan sementara');
+      loadLeaders();loadAgents();
+    }
     else toast('Database lama masih diblokir — dicoba lagi otomatis');
   }catch(e){toast('⚠️ '+e.message);}
 }

@@ -1,7 +1,7 @@
 // API Agents — buat, baca, list, hapus agent (data di Upstash Redis)
 // Buat/list/hapus butuh login leader (token) atau admin; tiap agent tercatat leaderId pembuatnya
 import crypto from 'node:crypto';
-import { redis, K, parse, hashObj, validId, cors, ensureMigrated, PENDING_MSG } from './_db.js';
+import { redis, K, parse, hashObj, validId, cors, ensureRestored, PENDING_MSG } from './_db.js';
 import { isAdmin, leaderFromReq } from './_auth.js';
 
 async function listAgents(r) {
@@ -24,6 +24,7 @@ async function listAgents(r) {
         name: a.name,
         wa: a.wa,
         leaderId: a.leaderId || null,
+        recovered: !!a.recovered,
         activatedAt: activated[a.id] || null,
         createdAt: a.createdAt,
         updatedAt: st.u || a.createdAt,
@@ -74,11 +75,14 @@ export default async function handler(req, res) {
         if (!validId(aid)) return res.status(404).json({ error: 'Agent tidak ditemukan' });
         let [metaS, dataS] = await r.mget(K.agent(aid), K.agentData(aid));
         if (!metaS) {
-          // Belum ada di database baru — mungkin agent lama yang datanya belum selesai dipindahkan
-          const mig = await ensureMigrated(r);
-          if (!mig.done) return res.status(503).json({ error: PENDING_MSG, pending: true });
+          // Belum ada di database baru — agent lama yang datanya belum selesai dipindahkan.
+          // ensureRestored() memulihkan link lama walau isi Blob masih terkunci.
+          const st = await ensureRestored(r);
           [metaS, dataS] = await r.mget(K.agent(aid), K.agentData(aid));
-          if (!metaS) return res.status(404).json({ error: 'Agent tidak ditemukan' });
+          if (!metaS) {
+            if (!st.done && !st.recovered) return res.status(503).json({ error: PENDING_MSG, pending: true });
+            return res.status(404).json({ error: 'Agent tidak ditemukan' });
+          }
         }
         const meta = parse(metaS);
         const data = parse(dataS) || {};
@@ -102,7 +106,7 @@ export default async function handler(req, res) {
       const admin = isAdmin(req);
       const leader = admin ? null : await leaderFromReq(r, req);
       if (!admin && !leader) return res.status(401).json({ error: 'Login dulu untuk melihat daftar agent' });
-      const mig = await ensureMigrated(r);
+      const mig = await ensureRestored(r);
       let agents = await listAgents(r);
       if (leader) agents = agents.filter((a) => a.leaderId === leader.id);
       agents.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
