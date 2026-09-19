@@ -64,6 +64,33 @@ export default async function handler(req, res) {
       return res.status(200).json({ token: signToken(leader.id), leader: { id: leader.id, name: leader.name } });
     }
 
+    // ── Leader ganti passwordnya sendiri (butuh sesi login + password lama) ──
+    if (req.method === 'POST' && action === 'change-password') {
+      const me = await leaderFromReq(r, req);
+      if (!me) return res.status(401).json({ error: 'Sesi tidak valid, login ulang' });
+      const leader = await readLeader(r, me.id);
+      if (!leader || !leader.salt || !leader.passHash) {
+        return res.status(409).json({ error: 'Akun belum aktif — minta admin mengaktifkannya dulu' });
+      }
+      const { current, next } = req.body || {};
+      const baru = String(next || '');
+      if (baru.length < 6) return res.status(400).json({ error: 'Password baru minimal 6 karakter' });
+
+      const now = Buffer.from(hashPassword(String(current || ''), leader.salt));
+      const want = Buffer.from(leader.passHash);
+      if (now.length !== want.length || !crypto.timingSafeEqual(now, want)) {
+        return res.status(401).json({ error: 'Password lama salah' });
+      }
+
+      leader.salt = crypto.randomBytes(16).toString('hex');
+      leader.passHash = hashPassword(baru, leader.salt);
+      leader.updatedAt = new Date().toISOString();
+      // Password pilihan leader sendiri — jangan ditimpa lagi saat database lama pulih
+      if (leader.recovered) leader.pwKeep = true;
+      await writeLeader(r, leader, { overwrite: true });
+      return res.status(200).json({ ok: true, token: signToken(leader.id) });
+    }
+
     // ── Profil sendiri dari token (untuk auto-login) ──
     if (req.method === 'GET' && action === 'me') {
       const leader = await leaderFromReq(r, req);

@@ -136,6 +136,19 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
     <p class="lead">Buat link unik untuk agent baru &amp; pantau aktivasinya — semua data di bawah ini khusus agent yang kamu buat.</p>
 
     <div class="mig-banner" id="ld-mig">⏳ Database lama sedang dipulihkan (selesai otomatis sekitar 4 Okt). <strong>Semua link agent lama sudah aktif kembali</strong> — nama &amp; no WA-nya menyusul sendiri, atau muncul begitu agent-nya buka link. Link baru bisa langsung di-generate seperti biasa.</div>
+
+    <div class="card" id="pw-card">
+      <h2>🔑 Password Kamu</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Ganti kapan saja jadi password yang kamu hafal. Yang kamu pilih di sini permanen — tidak akan tertimpa oleh pemulihan database.</p>
+      <div class="frow">
+        <input type="password" id="pw-cur" placeholder="Password sekarang..." maxlength="60" autocomplete="current-password">
+        <input type="password" id="pw-new" placeholder="Password baru (min 6)..." maxlength="60" autocomplete="new-password">
+        <input type="password" id="pw-new2" placeholder="Ulangi password baru..." maxlength="60" autocomplete="new-password">
+        <button class="btn" id="pw-btn" onclick="changeMyPassword()">Ganti Password</button>
+      </div>
+      <div class="err" id="pw-err"></div>
+      <div class="ok-msg" id="pw-ok"></div>
+    </div>
     <div class="stats" id="ld-stats"></div>
 
     <div class="card">
@@ -291,6 +304,32 @@ async function loginLeader(){
     enterLeader();
   }catch(e){err.textContent='⚠️ '+e.message;err.style.display='block';}
   btn.disabled=false;btn.textContent='Masuk';
+}
+
+// Leader mengganti passwordnya sendiri — butuh password lamanya, jadi tetap aman
+async function changeMyPassword(){
+  const cur=document.getElementById('pw-cur').value;
+  const a=document.getElementById('pw-new').value;
+  const b=document.getElementById('pw-new2').value;
+  const err=document.getElementById('pw-err'), ok=document.getElementById('pw-ok'), btn=document.getElementById('pw-btn');
+  err.style.display='none';ok.style.display='none';
+  const gagal=function(m){err.textContent='⚠️ '+m;err.style.display='block';};
+  if(!cur||!a||!b)return gagal('Semua kolom wajib diisi.');
+  if(a.length<6)return gagal('Password baru minimal 6 karakter.');
+  if(a!==b)return gagal('Ulangi password baru belum sama.');
+  if(a===cur)return gagal('Password baru masih sama dengan yang lama.');
+  btn.disabled=true;btn.textContent='Menyimpan...';
+  try{
+    const r=await fetch(API+'/leaders?action=change-password',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({current:cur,next:a})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Gagal mengganti password');
+    if(d.token){LEADER_TOKEN=d.token;localStorage.setItem('leader_token',LEADER_TOKEN);}
+    ['pw-cur','pw-new','pw-new2'].forEach(function(k){document.getElementById(k).value='';});
+    ok.textContent='✅ Password berhasil diganti. Pakai password baru ini lain kali kamu login.';
+    ok.style.display='block';
+    toast('Password diganti ✓');
+  }catch(e){gagal(e.message);}
+  btn.disabled=false;btn.textContent='Ganti Password';
 }
 
 async function loginAdmin(){
