@@ -197,6 +197,19 @@ h1{font-size:20px;font-weight:800;margin-bottom:4px}
     </div>
 
     <div class="card">
+      <h2>🛟 Backup &amp; Pemulihan</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Unduh seluruh isi database jadi satu file dan simpan di laptop/Drive. Kalau suatu hari ada apa-apa, file ini mengembalikan semuanya. Snapshot harian juga dibuat otomatis dan disimpan 8 hari terakhir.</p>
+      <div class="frow">
+        <button class="btn" onclick="downloadBackup()">⬇️ Unduh Backup Sekarang</button>
+        <button class="btn btn-ghost" onclick="restoreFromFile()">⬆️ Pulihkan dari File</button>
+        <button class="btn btn-ghost" onclick="loadSnapshots()">↻ Lihat Snapshot Otomatis</button>
+      </div>
+      <input type="file" id="bk-file" accept="application/json,.json" style="display:none">
+      <div id="snap-list" style="margin-top:12px"></div>
+      <div class="note">Pemulihan bersifat <strong>menambahkan</strong>: data yang sekarang ada tidak pernah ditimpa atau dihapus — jadi aman diklik kapan pun.</div>
+    </div>
+
+    <div class="card">
       <h2>👥 Semua Agent <span class="refresh" onclick="loadAgents()">↻ Refresh</span></h2>
       <div id="ad-agent-list"><div class="empty">Memuat...</div></div>
       <div class="note"><strong>Status</strong> = agent sudah membuka link dashboard-nya atau belum. <strong>P1</strong> = nama dicentang ketemu / total nama di list.</div>
@@ -529,6 +542,70 @@ async function assignOrphans(){
     loadAgents();
   }catch(e){toast('⚠️ '+e.message);}
   btn.disabled=false;btn.textContent='Pindahkan Semua';
+}
+
+// ── Backup & pemulihan ──
+async function downloadBackup(){
+  toast('Menyiapkan backup...');
+  try{
+    const r=await fetch(API+'/backup',{headers:authHeaders()});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||'Gagal mengunduh');
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='learning-journey-backup-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),10000);
+    toast('Backup terunduh ✓ simpan baik-baik');
+  }catch(e){toast('⚠️ '+e.message);}
+}
+
+function restoreFromFile(){
+  const inp=document.getElementById('bk-file');
+  inp.value='';
+  inp.onchange=async function(){
+    const f=inp.files&&inp.files[0];
+    if(!f)return;
+    let data;
+    try{data=JSON.parse(await f.text());}catch(e){toast('⚠️ File bukan JSON yang valid');return;}
+    const n=(data.agents||[]).length, m=(data.leaders||[]).length;
+    if(!confirm('Pulihkan dari "'+f.name+'"?\n\nIsi: '+m+' leader, '+n+' agent.\nData yang sekarang ada TIDAK akan ditimpa atau dihapus.'))return;
+    toast('Memulihkan...');
+    try{
+      const r=await fetch(API+'/backup?action=restore',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify(data)});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||'Gagal memulihkan');
+      toast('Pulih ✓ '+d.leaders+' leader, '+d.agents+' agent');
+      loadLeaders();loadAgents();
+    }catch(e){toast('⚠️ '+e.message);}
+  };
+  inp.click();
+}
+
+async function loadSnapshots(){
+  const box=document.getElementById('snap-list');
+  box.innerHTML='<div class="empty">Memuat...</div>';
+  try{
+    const r=await fetch(API+'/backup?action=list',{headers:authHeaders()});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Gagal memuat');
+    if(!d.snapshots.length){box.innerHTML='<div class="empty">Belum ada snapshot — yang pertama dibuat otomatis malam ini.</div>';return;}
+    box.innerHTML=d.snapshots.map(s=>`<div class="agent-row">
+      <div class="a-info"><div class="a-name">📦 ${esc(s.day)}</div><div class="a-wa">${s.leaders} leader · ${s.agents} agent</div></div>
+      <div class="a-actions"><button class="btn btn-sm btn-ghost" onclick="restoreSnapshot('${esc(s.day)}')">Pulihkan</button></div>
+    </div>`).join('');
+  }catch(e){box.innerHTML='<div class="empty">⚠️ '+e.message+'</div>';}
+}
+
+async function restoreSnapshot(day){
+  if(!confirm('Pulihkan dari snapshot '+day+'?\n\nData yang sekarang ada TIDAK akan ditimpa atau dihapus.'))return;
+  try{
+    const r=await fetch(API+'/backup?action=restore',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({snapshot:day})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Gagal memulihkan');
+    toast('Pulih ✓ '+d.leaders+' leader, '+d.agents+' agent');
+    loadLeaders();loadAgents();
+  }catch(e){toast('⚠️ '+e.message);}
 }
 
 async function runMigration(){
