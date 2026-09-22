@@ -1,5 +1,89 @@
+# ── Dependencies & build ──────────────────────────────
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+out/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+.cache/
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# ── Secrets (JANGAN PERNAH DI-COMMIT) ─────────────────
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+.vercel/
+**/.vercel/
+.netlify/
+**/.netlify/
+*.pem
+*.key
+
+# ── macOS ─────────────────────────────────────────────
+.DS_Store
+**/.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# ── Media berat (tetap di lokal, lihat ASSETS.md) ─────
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.wav
+*.mp3
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+*.psd
+*.ai
+*.sketch
+*.fig
+
+# ── Dokumen binary (tetap di lokal) ───────────────────
+*.pdf
+*.docx
+*.doc
+*.pptx
+*.ppt
+*.xlsx
+*.xls
+
+# ── Gambar raster: default di-skip, yang <1MB di-force-add ──
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.bmp
+*.tiff
+*.heic
+
+# ── Font binary besar ─────────────────────────────────
+*.ttf
+*.otf
+
+# ── Log & temp ────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-error.log*
+.claude/settings.local.json
+*.bak
+*.old
 .vercel
 IMG_1439.PNG
 node_modules
-.DS_Store
 package-lock.json
